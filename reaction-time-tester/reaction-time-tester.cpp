@@ -16,7 +16,7 @@ BOOL isReact = FALSE;
 BOOL isEarly = FALSE;
 BOOL isResult = FALSE;
 BOOL isReadyForReact = FALSE;
-LARGE_INTEGER startTime, endTime, freq;    // For high-resolution timing.
+LARGE_INTEGER startTime, endTime, freq; // For high-resolution timing.
 double* reactionTimes = NULL; // Array to store the last 5 reaction times.
 int currentAttempt = 0;
 
@@ -44,7 +44,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     wc.hInstance = hInstance;
     wc.lpszClassName = CLASS_NAME;
 
-    // Register the window class. 
+    // Register the window class.
     if (!RegisterClass(&wc)) {
         MessageBox(NULL, L"Failed to register window class", L"Error", MB_OK);
         return 0;
@@ -64,7 +64,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
         CLASS_NAME,
         L"reaction-time-tester",
         WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT, CW_USEDEFAULT, 1280, 720,   // Updated window size.
+        CW_USEDEFAULT, CW_USEDEFAULT, 1280, 720, // Updated window size.
         NULL,
         NULL,
         hInstance,
@@ -74,7 +74,6 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     // Display the window.
     ShowWindow(hwnd, nCmdShow);
     UpdateWindow(hwnd);
-
 
     if (hwnd == NULL) {
         MessageBox(NULL, L"Failed to create window", L"Error", MB_OK);
@@ -90,7 +89,6 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 
     // Seed the random number generator.
     srand((unsigned)time(NULL));
-
 
     // Schedule the transition to green after a random delay.
     int delay = (rand() % (MaxDelay - MinDelay + 1)) + MinDelay;
@@ -122,8 +120,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             return TRUE;
         }
         break;
-    case WM_PAINT:
-    {
+
+    case WM_PAINT: {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hwnd, &ps);
 
@@ -149,12 +147,11 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
         // Display text based on the state.
         SetBkMode(hdc, TRANSPARENT);
-        SetTextColor(hdc, RGB(255, 255, 255));  // White text.
+        SetTextColor(hdc, RGB(255, 255, 255)); // White text.
         HFONT hFont = CreateFont(30, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, ANSI_CHARSET,
             OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
             DEFAULT_PITCH | FF_DONTCARE, L"Arial");
         SelectObject(hdc, hFont);
-
 
         if (isResult) {
             SetTextColor(hdc, RGB(ResultsTextColor[0], ResultsTextColor[1], ResultsTextColor[2]));
@@ -187,28 +184,28 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
         DeleteObject(hFont);
         EndPaint(hwnd, &ps);
-    }
-    break;
+    } break;
+
     case WM_TIMER:
         switch (wParam) {
-        case TIMER_READY:
-        {
+        case TIMER_READY: {
             isReadyForReact = TRUE;
             KillTimer(hwnd, TIMER_READY);
             int greenDelay = (rand() % (MaxDelay - MinDelay + 1)) + MinDelay;
             SetTimer(hwnd, TIMER_REACT, greenDelay, NULL);
-            break;
-        }
+        } break;
+
         case TIMER_REACT:
             if (isReadyForReact) {
-                isReact = TRUE;  // Change the screen to green.
+                isReact = TRUE; // Change the screen to green.
                 isReadyForReact = FALSE;
-                QueryPerformanceCounter(&startTime);  // Start the timer for reaction time.
-                InvalidateRect(hwnd, NULL, TRUE);  // Force repaint.
+                QueryPerformanceCounter(&startTime); // Start the timer for reaction time.
+                InvalidateRect(hwnd, NULL, TRUE); // Force repaint.
             }
             break;
+
         case TIMER_EARLY:
-            ResetLogic(hwnd);  // Reset the game after showing the "too early" state.
+            ResetLogic(hwnd); // Reset the game after showing the "too early" state.
             break;
         }
         break;
@@ -241,14 +238,13 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         }
         break;
 
-
     case WM_DESTROY:
         PostQuitMessage(0);
         return 0;
+
     default:
         return DefWindowProc(hwnd, uMsg, wParam, lParam);
     }
-
 
     return 0;
 }
