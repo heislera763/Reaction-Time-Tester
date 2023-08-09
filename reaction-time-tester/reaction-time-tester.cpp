@@ -229,7 +229,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     case WM_INPUT:
     {
         if (RawKeyboardEnable == 1) {  // Raw input is enabled
-            UINT dwSize;
+            UINT dwSize = 0;
             GetRawInputData((HRAWINPUT)lParam, RID_INPUT, NULL, &dwSize, sizeof(RAWINPUTHEADER));
             LPBYTE lpb = new BYTE[dwSize];
 
@@ -442,7 +442,7 @@ void HandleError(const wchar_t* errorMessage) {
 }
 
 void RegisterForRawInput(HWND hwnd) {
-    RAWINPUTDEVICE rid[2];
+    RAWINPUTDEVICE rid[2]{};
 
     // Register for keyboard raw input
     rid[0].usUsagePage = 0x01;
