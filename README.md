@@ -14,6 +14,9 @@ The program works like so: It starts in the inital "Ready" state, in which the u
  - Text color configuration (Per state)
  - Default .cfg generation
  - Thorough bounds checking
+ - Better explanation for .cfg settings
+ - Show current trial number between tests
+ - Results exporting
 
 # Background Info:
 
