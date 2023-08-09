@@ -11,12 +11,13 @@
 #define DEFAULT_MIN_DELAY 1000
 #define DEFAULT_MAX_DELAY 3000
 #define DEFAULT_EARLY_RESET_DELAY 3000
-#define DEFAULT_INPUT_REJECTION_DELAY 150
+#define DEFAULT_VIRTUAL_DEBOUNCE 0
 #define DEFAULT_NUM_TRIALS 5
+#define DEFAULT_RAWKEYBOARDENABLE 0
 
 COLORREF ReadyColor[3], ReactColor[3], EarlyColor[3], ResultColor[3], EarlyTextColor[3], ResultsTextColor[3];
-int MinDelay, MaxDelay, NumberOfTrials, EarlyResetDelay, InputRejectionDelay;
-int RawKeyboardEnable = 0; // Hardcoded for now while raw keyboard input is broken
+int MinDelay, MaxDelay, NumberOfTrials, EarlyResetDelay, VirtualDebounce, RawKeyboardEnable;
+
 int TotalTrialNumber = 0;
 
 // Global variables to maintain the program's state.
@@ -26,7 +27,9 @@ BOOL isResult = FALSE;
 BOOL isReadyForReact = FALSE;
 BOOL isRawInputEnabled = FALSE;
 
-LARGE_INTEGER startTime, endTime, freq; // For high-resolution timing.
+LARGE_INTEGER startTime, endTime, freq, lastInputTime; // For high-resolution timing.
+BOOL isFirstInput = TRUE;
+
 double* reactionTimes = NULL; // Array to store the last 5 reaction times.
 int currentAttempt = 0;
 
@@ -225,6 +228,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         case TIMER_EARLY:
             ResetLogic(hwnd); // Reset the game after showing the "too early" state.
             break;
+
         }
         break;
 
@@ -364,11 +368,11 @@ void LoadConfig() {
 
     MinDelay = GetPrivateProfileInt(L"Delays", L"MinDelay", DEFAULT_MIN_DELAY, cfgPath);
     MaxDelay = GetPrivateProfileInt(L"Delays", L"MaxDelay", DEFAULT_MAX_DELAY, cfgPath);
+    EarlyResetDelay = GetPrivateProfileInt(L"Delays", L"EarlyResetDelay", DEFAULT_EARLY_RESET_DELAY, cfgPath);
+    VirtualDebounce = GetPrivateProfileInt(L"Delays", L"VirtualDebounce", DEFAULT_VIRTUAL_DEBOUNCE, cfgPath);
+    ValidateDelays(); 
 
-    ValidateDelays();
-
-    EarlyResetDelay = GetPrivateProfileInt(L"Delays", L"EarlyRestDelay", DEFAULT_EARLY_RESET_DELAY, cfgPath);
-    InputRejectionDelay = GetPrivateProfileInt(L"Delays", L"InputRejectionDelay", DEFAULT_INPUT_REJECTION_DELAY, cfgPath);
+    RawKeyboardEnable = GetPrivateProfileInt(L"Toggles", L"RawKeyboardEnable", DEFAULT_RAWKEYBOARDENABLE, cfgPath);
 
     LoadTrialConfiguration(cfgPath);
     LoadTextColorConfiguration(cfgPath);
@@ -377,7 +381,7 @@ void LoadConfig() {
 }
 
 void ValidateDelays() {
-    if (MinDelay <= 0 || MaxDelay <= 0 || MaxDelay < MinDelay) {
+    if (MinDelay <= 0 || MaxDelay <= 0 || MaxDelay < MinDelay || VirtualDebounce < 0 || EarlyResetDelay <=0) {
         MessageBox(NULL, L"Invalid delay values in the configuration!", L"Error", MB_OK);
         exit(1);
     }
