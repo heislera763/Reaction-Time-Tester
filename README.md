@@ -9,15 +9,6 @@ The program works like so: It starts in the inital "Ready" state, in which the u
  - Delay
  - Number of trials to average
 
-### Possible additions/changes for the future:
- - Double click rejection (To avoid accidentally skipping past a state)
- - Text color configuration (Per state)
- - Default .cfg generation
- - Thorough bounds checking
- - Better explanation for .cfg settings
- - Show current trial number between tests
- - Results exporting
-
 # Background Info:
 
 This is a program I made while testing out the capabilities of GPT4 (via ChatGPT). It took a lot of verbose prompting, manual adjustments, and lots of diagnostics to get it into this state, but I am happy with the results. Please note that the program doesn't work correctly without reaction.cfg in the same folder as the executable.
