@@ -9,8 +9,8 @@
 #define TIMER_REACT 2
 #define TIMER_EARLY 3
 
-COLORREF ReadyColor[3], ReactColor[3], EarlyColor[3], ResultColor[3];
-int MinDelay, MaxDelay, NumberOfTrials;
+COLORREF ReadyColor[3], ReactColor[3], EarlyColor[3], ResultColor[3], EarlyTextColor[3], ResultsTextColor[3];
+int MinDelay, MaxDelay, NumberOfTrials, InputRejectionDelay;
 
 // Global variables to maintain the program's state.
 BOOL isReact = FALSE;
@@ -158,9 +158,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
 
         if (isResult) {
+            SetTextColor(hdc, RGB(ResultsTextColor[0], ResultsTextColor[1], ResultsTextColor[2]));
             wchar_t buf[100];
             if (currentAttempt < NumberOfTrials) {
-                swprintf(buf, 100, L"Last: %.2lfms\nComplete %d trials for average.", reactionTimes[(currentAttempt - 1 + NumberOfTrials) % NumberOfTrials], NumberOfTrials);
+                swprintf_s(buf, 100, L"Last: %.2lfms\nComplete %d trials for average.", reactionTimes[(currentAttempt - 1 + NumberOfTrials) % NumberOfTrials], NumberOfTrials);
             }
             else {
                 double total = 0;
@@ -168,7 +169,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                     total += reactionTimes[i];
                 }
                 double average = total / NumberOfTrials;
-                swprintf(buf, 100, L"Last: %.2lfms\nAverage (last %d): %.2lfms", reactionTimes[(currentAttempt - 1) % NumberOfTrials], NumberOfTrials, average);
+                swprintf_s(buf, 100, L"Last: %.2lfms\nAverage (last %d): %.2lfms", reactionTimes[(currentAttempt - 1) % NumberOfTrials], NumberOfTrials, average);
             }
 
             RECT textRect;
@@ -181,6 +182,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             DrawText(hdc, buf, -1, &centeredRect, DT_CENTER | DT_WORDBREAK);
         }
         else if (isEarly) {
+            SetTextColor(hdc, RGB(EarlyTextColor[0], EarlyTextColor[1], EarlyTextColor[2]));
             DrawText(hdc, L"Too early!", -1, &rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
         }
 
@@ -332,6 +334,15 @@ void LoadConfig() {
     MinDelay = GetPrivateProfileInt(L"Delays", L"MinDelay", 1000, cfgPath);
     MaxDelay = GetPrivateProfileInt(L"Delays", L"MaxDelay", 3000, cfgPath);
     NumberOfTrials = GetPrivateProfileInt(L"Trial", L"NumberOfTrials", 5, cfgPath);
+
+    InputRejectionDelay = GetPrivateProfileInt(L"Delays", L"InputRejectionDelay", 150, cfgPath);
+
+    GetPrivateProfileString(L"Colors", L"EarlyTextColor", L"", buffer, 255, cfgPath);
+    swscanf_s(buffer, L"%d,%d,%d", &EarlyTextColor[0], &EarlyTextColor[1], &EarlyTextColor[2]);
+
+    GetPrivateProfileString(L"Colors", L"ResultsTextColor", L"", buffer, 255, cfgPath);
+    swscanf_s(buffer, L"%d,%d,%d", &ResultsTextColor[0], &ResultsTextColor[1], &ResultsTextColor[2]);
+
 
     // If previously allocated, free the memory
     if (reactionTimes) {
