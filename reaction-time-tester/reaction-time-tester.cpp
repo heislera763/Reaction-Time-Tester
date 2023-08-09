@@ -16,13 +16,21 @@
 #define DEFAULT_RAWKEYBOARDENABLE 1
 #define DEFAULT_RAWMOUSEENABLE 1
 #define MAX_KEYS 256
+#define DEFAULT_FONT_SIZE 32
+#define DEFAULT_FONT_NAME L"Arial"
+#define DEFAULT_FONT_STYLE L"Regular"
 
-COLORREF ReadyColor[3], ReactColor[3], EarlyColor[3], ResultColor[3], EarlyTextColor[3], ResultsTextColor[3];
+COLORREF ReadyColor[3], ReactColor[3], EarlyColor[3], ResultColor[3], EarlyFontColor[3], ResultsFontColor[3];
 int MinDelay, MaxDelay, NumberOfTrials, EarlyResetDelay, VirtualDebounce, RawKeyboardEnable, RawMouseEnable, RawInputDebug;
 double* reactionTimes = NULL; // Array to store the last 5 reaction times.
 int currentAttempt = 0;
 int TotalTrialNumber = 0;
 int keyStates[MAX_KEYS] = { 0 }; // 0: not pressed, 1: pressed
+
+// Font stuff
+wchar_t fontName[MAX_PATH];
+wchar_t fontStyle[MAX_PATH];
+int fontSize;
 
 // Global variables to maintain the program's state.
 BOOL isReact = FALSE;
@@ -44,9 +52,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 // Utility functions
 void HandleError(const wchar_t* errorMessage);
 void CheckColorValidity(COLORREF color[]);
-void GetColorFromConfig(const wchar_t* cfgPath, const wchar_t* colorName, COLORREF* targetColorArray, wchar_t* buffer);
-void LoadColorConfiguration(const wchar_t* cfgPath, const wchar_t* colorName, COLORREF* targetColorArray);
+void LoadColorConfiguration(const wchar_t* cfgPath, const wchar_t* sectionName, const wchar_t* colorName, COLORREF* targetColorArray);
 bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength);
+void RemoveComment(wchar_t* str);
 
 // Configuration and setup functions
 void ValidateDelays();
@@ -56,8 +64,8 @@ void AllocateMemoryForReactionTimes();
 void LoadConfig();
 
 // Input handling functions
-void RegisterForRawKeyboardInput(HWND hwnd);
-void RegisterForRawMouseInput(HWND hwnd);
+bool RegisterForRawKeyboardInput(HWND hwnd);
+bool RegisterForRawMouseInput(HWND hwnd);
 void HandleInput(HWND hwnd);
 void HandleGenericKeyboardInput(HWND hwnd);
 void HandleRawKeyboardInput(RAWINPUT* raw, HWND hwnd);
@@ -119,12 +127,15 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     );
 
     // Raw input
-    if (RawKeyboardEnable==1) RegisterForRawKeyboardInput(hwnd);
-    if (RawMouseEnable == 1) RegisterForRawMouseInput(hwnd);
+    bool keyboardRegistered = false;
+    bool mouseRegistered = false;
+
+    if (RawKeyboardEnable == 1) keyboardRegistered = RegisterForRawKeyboardInput(hwnd);
+    if (RawMouseEnable == 1) mouseRegistered = RegisterForRawMouseInput(hwnd);
 
     if (RawInputDebug == 1) {
         wchar_t message[256];
-        swprintf(message, sizeof(message) / sizeof(wchar_t), L"RawKeyboardEnable: %d\nRawMouseEnable: %d\nRegisterForRawKeyboardInput: %s\nRegisterForRawMouseInput: %s", RawKeyboardEnable, RawMouseEnable, RegisterForRawKeyboardInput ? L"True" : L"False", RegisterForRawMouseInput ? L"True" : L"False");
+        swprintf(message, sizeof(message) / sizeof(wchar_t), L"RawKeyboardEnable: %d\nRawMouseEnable: %d\nRegisterForRawKeyboardInput: %s\nRegisterForRawMouseInput: %s", RawKeyboardEnable, RawMouseEnable, keyboardRegistered ? L"True" : L"False", mouseRegistered ? L"True" : L"False");
         MessageBox(NULL, message, L"Raw Input Variables", MB_OK);
     }
 
@@ -147,10 +158,24 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     // Schedule the transition to green after a random delay.
     SetTimer(hwnd, TIMER_READY, MAXMINDELAY, NULL);
 
-    // Prepare font before message loop
-    hFont = CreateFont(30, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, ANSI_CHARSET,
+    int fontWeight = FW_REGULAR;
+    BOOL isItalic = FALSE;
+
+    if (wcscmp(fontStyle, L"Bold") == 0) {
+        fontWeight = FW_BOLD;
+    }
+    else if (wcscmp(fontStyle, L"Italic") == 0) {
+        isItalic = TRUE;
+    }
+
+    // Prepare font using the loaded configurations
+    hFont = CreateFont(fontSize, 0, 0, 0, fontWeight, isItalic, FALSE, FALSE, ANSI_CHARSET,
         OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
-        DEFAULT_PITCH | FF_DONTCARE, L"Arial");
+        DEFAULT_PITCH | FF_DONTCARE, fontName);
+
+    if (!hFont) {
+        MessageBox(hwnd, L"Failed to create font.", L"Error", MB_OK);
+    }
 
     // Enter the standard Windows message loop.
     MSG msg = {};
@@ -172,8 +197,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     case WM_SETCURSOR:
         switch (LOWORD(lParam)) {
         case HTCLIENT:
-            // Set the cursor to a hand cursor for specific areas in the client area
-            // You can implement your own logic here to determine cursor change areas
+            // Set the cursor to a hand cursor
+            // We may want to implement further logic here at some point
             // For example, checking if the mouse is over clickable elements.
             SetCursor(LoadCursor(NULL, IDC_HAND));
             break;
@@ -233,7 +258,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         wchar_t buf[100] = { 0 }; // Initialize buffer
 
         if (isResult) {
-            SetTextColor(hdc, RGB(ResultsTextColor[0], ResultsTextColor[1], ResultsTextColor[2]));
+            SetTextColor(hdc, RGB(ResultsFontColor[0], ResultsFontColor[1], ResultsFontColor[2]));
             TotalTrialNumber++;
 
             if (currentAttempt < NumberOfTrials) {
@@ -250,7 +275,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
         }
         else if (isEarly) {
-            SetTextColor(hdc, RGB(EarlyTextColor[0], EarlyTextColor[1], EarlyTextColor[2]));
+            SetTextColor(hdc, RGB(EarlyFontColor[0], EarlyFontColor[1], EarlyFontColor[2]));
             swprintf_s(buf, 100, L"Too early!\nTrials so far: %d", TotalTrialNumber);
         }
 
@@ -259,7 +284,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         SetRectEmpty(&textRect);
         DrawText(hdc, buf, -1, &textRect, DT_CALCRECT | DT_WORDBREAK);
         RECT centeredRect = rect;
-        centeredRect.top += (rect.bottom - textRect.bottom) / 2;
+        centeredRect.top += (rect.bottom - rect.top - (textRect.bottom - textRect.top)) / 2; // Text doesn't center vertically (Possibly due to newline not being accounted for?)
         DrawText(hdc, buf, -1, &centeredRect, DT_CENTER | DT_WORDBREAK);
 
         EndPaint(hwnd, &ps);
@@ -362,19 +387,33 @@ void CheckColorValidity(COLORREF color[]) {
     }
 }
 
-void GetColorFromConfig(const wchar_t* cfgPath, const wchar_t* colorName, COLORREF* targetColorArray, wchar_t* buffer) {
-    GetPrivateProfileString(L"Colors", colorName, L"", buffer, MAX_PATH, cfgPath);
+void LoadColorConfiguration(const wchar_t* cfgPath, const wchar_t* sectionName, const wchar_t* colorName, COLORREF* targetColorArray) {
+    wchar_t buffer[255];
+    GetPrivateProfileString(sectionName, colorName, L"", buffer, sizeof(buffer) / sizeof(wchar_t), cfgPath);
+
     if (wcslen(buffer) == 0) {
         HandleError(L"Failed to read color configuration");
     }
-    swscanf_s(buffer, L"%d,%d,%d", &targetColorArray[0], &targetColorArray[1], &targetColorArray[2]);
-}
 
-void LoadColorConfiguration(const wchar_t* cfgPath, const wchar_t* colorName, COLORREF* targetColorArray) {
-    wchar_t buffer[255];
-    GetPrivateProfileString(L"Colors", colorName, L"", buffer, sizeof(buffer) / sizeof(wchar_t), cfgPath);
     swscanf_s(buffer, L"%d,%d,%d", &targetColorArray[0], &targetColorArray[1], &targetColorArray[2]);
     CheckColorValidity(targetColorArray);
+}
+
+void LoadFontConfiguration(const wchar_t* cfgPath, wchar_t* targetFontName, size_t maxLength, int* fontSize, wchar_t* fontStyle, size_t fontStyleLength) {
+
+    // Load font name
+    GetPrivateProfileString(L"Fonts", L"FontName", DEFAULT_FONT_NAME, targetFontName, (DWORD)maxLength, cfgPath);
+    RemoveComment(targetFontName);
+    if (wcslen(targetFontName) == 0) {
+        HandleError(L"Failed to read font configuration");
+    }
+
+    // Load font size
+    *fontSize = GetPrivateProfileInt(L"Fonts", L"FontSize", DEFAULT_FONT_SIZE, cfgPath);
+
+    // Load font style
+    GetPrivateProfileString(L"Fonts", L"FontStyle", DEFAULT_FONT_STYLE, fontStyle, (DWORD)fontStyleLength, cfgPath);
+    RemoveComment(fontStyle);
 }
 
 bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength) {
@@ -426,6 +465,20 @@ bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength) {
     return true;  // Successfully obtained the config path
 }
 
+void RemoveComment(wchar_t* str) { //Filter comment from any strings read from .cfg
+    wchar_t* semicolonPos = wcschr(str, L';');
+    if (semicolonPos) {
+        *semicolonPos = L'\0';  // Set the position of the semicolon to null terminator.
+    }
+
+    // Trim trailing spaces if needed
+    size_t len = wcslen(str);
+    while (len > 0 && iswspace(str[len - 1])) {
+        str[len - 1] = L'\0';
+        len--;
+    }
+}
+
 
 // Configuration and setup functions
 void ValidateDelays() {
@@ -445,8 +498,8 @@ void LoadTrialConfiguration(const wchar_t* cfgPath) {
 
 void LoadTextColorConfiguration(const wchar_t* cfgPath) {
     wchar_t buffer[MAX_PATH];
-    GetColorFromConfig(cfgPath, L"EarlyTextColor", EarlyTextColor, buffer);
-    GetColorFromConfig(cfgPath, L"ResultsTextColor", ResultsTextColor, buffer);
+    LoadColorConfiguration(cfgPath, L"Fonts", L"EarlyFontColor", EarlyFontColor);
+    LoadColorConfiguration(cfgPath, L"Fonts", L"ResultsFontColor", ResultsFontColor);
 }
 
 void AllocateMemoryForReactionTimes() {
@@ -465,10 +518,10 @@ void LoadConfig() {
         exit(1); // Exiting as the path acquisition failed
     }
 
-    LoadColorConfiguration(cfgPath, L"ReadyColor", ReadyColor);
-    LoadColorConfiguration(cfgPath, L"ReactColor", ReactColor);
-    LoadColorConfiguration(cfgPath, L"EarlyColor", EarlyColor);
-    LoadColorConfiguration(cfgPath, L"ResultColor", ResultColor);
+    LoadColorConfiguration(cfgPath, L"Colors", L"ReadyColor", ReadyColor);
+    LoadColorConfiguration(cfgPath, L"Colors", L"ReactColor", ReactColor);
+    LoadColorConfiguration(cfgPath, L"Colors", L"EarlyColor", EarlyColor);
+    LoadColorConfiguration(cfgPath, L"Colors", L"ResultColor", ResultColor);
     hReadyBrush = CreateSolidBrush(RGB(ReadyColor[0], ReadyColor[1], ReadyColor[2]));
     hReactBrush = CreateSolidBrush(RGB(ReactColor[0], ReactColor[1], ReactColor[2]));
     hEarlyBrush = CreateSolidBrush(RGB(EarlyColor[0], EarlyColor[1], EarlyColor[2]));
@@ -486,16 +539,16 @@ void LoadConfig() {
 
     LoadTrialConfiguration(cfgPath);
     LoadTextColorConfiguration(cfgPath);
+    LoadFontConfiguration(cfgPath, fontName, MAX_PATH, &fontSize, fontStyle, MAX_PATH);
 
     AllocateMemoryForReactionTimes();
 }
 
 
 // Input handling functions
-void RegisterForRawKeyboardInput(HWND hwnd) {
+bool RegisterForRawKeyboardInput(HWND hwnd) {
     RAWINPUTDEVICE rid{};
 
-    // Register for keyboard raw input
     rid.usUsagePage = 0x01;
     rid.usUsage = 0x06;
     rid.dwFlags = 0;
@@ -503,13 +556,14 @@ void RegisterForRawKeyboardInput(HWND hwnd) {
 
     if (!RegisterRawInputDevices(&rid, 1, sizeof(rid))) {
         MessageBox(NULL, L"Failed to register raw keyboard input device", L"Error", MB_OK);
+        return false;
     }
+    return true;
 }
 
-void RegisterForRawMouseInput(HWND hwnd) {
+bool RegisterForRawMouseInput(HWND hwnd) {
     RAWINPUTDEVICE rid{};
 
-    // Register for mouse raw input
     rid.usUsagePage = 0x01;
     rid.usUsage = 0x02;
     rid.dwFlags = 0;
@@ -517,7 +571,9 @@ void RegisterForRawMouseInput(HWND hwnd) {
 
     if (!RegisterRawInputDevices(&rid, 1, sizeof(rid))) {
         MessageBox(NULL, L"Failed to register raw mouse input device", L"Error", MB_OK);
+        return false;
     }
+    return true;
 }
 
 void HandleInput(HWND hwnd) {   // Primary "game" logic is done here
