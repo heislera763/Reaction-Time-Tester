@@ -3,14 +3,13 @@
 #include <time.h>
 #include <stdio.h>
 
-#pragma warning(disable: 28251)
-
 #define TIMER_READY 1
 #define TIMER_REACT 2
 #define TIMER_EARLY 3
+#define CHECK_RGB_VALUE(v) ((v) >= 0 && (v) <= 255)
 
 COLORREF ReadyColor[3], ReactColor[3], EarlyColor[3], ResultColor[3], EarlyTextColor[3], ResultsTextColor[3];
-int MinDelay, MaxDelay, NumberOfTrials, InputRejectionDelay;
+int MinDelay, MaxDelay, NumberOfTrials, EarlyResetDelay, InputRejectionDelay;
 
 // Global variables to maintain the program's state.
 BOOL isReact = FALSE;
@@ -31,8 +30,9 @@ void HandleReactClick(HWND hwnd);
 void HandleEarlyClick(HWND hwnd);
 void ResetAll(HWND hwnd);
 void LoadConfig();
+void CheckColorValidity(COLORREF color[]);
 
-int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
     QueryPerformanceFrequency(&freq);
 
     const wchar_t CLASS_NAME[] = L"Sample Window Class";
@@ -71,11 +71,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         NULL
     );
 
+    // Display the window.
     ShowWindow(hwnd, nCmdShow);
     UpdateWindow(hwnd);
 
-    // Set isReadyForGreen to TRUE right after displaying the window.
-    isReadyForReact = TRUE;
 
     if (hwnd == NULL) {
         MessageBox(NULL, L"Failed to create window", L"Error", MB_OK);
@@ -86,12 +85,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         return 0;
     }
 
+    // Set isReadyForGreen to TRUE right after displaying the window.
+    isReadyForReact = TRUE;
+
     // Seed the random number generator.
     srand((unsigned)time(NULL));
 
-    // Display the window.
-    ShowWindow(hwnd, nCmdShow);
-    UpdateWindow(hwnd);
 
     // Schedule the transition to green after a random delay.
     int delay = (rand() % (MaxDelay - MinDelay + 1)) + MinDelay;
@@ -289,7 +288,7 @@ void HandleReactClick(HWND hwnd) {
 void HandleEarlyClick(HWND hwnd) {
     isEarly = TRUE;
     isReadyForReact = FALSE;
-    SetTimer(hwnd, TIMER_EARLY, 1500, NULL);  // Show the red screen for 1.5 seconds.
+    SetTimer(hwnd, TIMER_EARLY, EarlyResetDelay, NULL);  // Show the red screen for 1.5 seconds.
     InvalidateRect(hwnd, NULL, TRUE);
 }
 
@@ -321,21 +320,37 @@ void LoadConfig() {
 
     GetPrivateProfileString(L"Colors", L"ReadyColor", L"", buffer, 255, cfgPath);
     swscanf_s(buffer, L"%d,%d,%d", &ReadyColor[0], &ReadyColor[1], &ReadyColor[2]);
+    CheckColorValidity(ReadyColor);
 
     GetPrivateProfileString(L"Colors", L"ReactColor", L"", buffer, 255, cfgPath);
     swscanf_s(buffer, L"%d,%d,%d", &ReactColor[0], &ReactColor[1], &ReactColor[2]);
+    CheckColorValidity(ReactColor);
 
     GetPrivateProfileString(L"Colors", L"EarlyColor", L"", buffer, 255, cfgPath);
     swscanf_s(buffer, L"%d,%d,%d", &EarlyColor[0], &EarlyColor[1], &EarlyColor[2]);
+    CheckColorValidity(EarlyColor);
 
     GetPrivateProfileString(L"Colors", L"ResultColor", L"", buffer, 255, cfgPath);
     swscanf_s(buffer, L"%d,%d,%d", &ResultColor[0], &ResultColor[1], &ResultColor[2]);
+    CheckColorValidity(ResultColor);
 
     MinDelay = GetPrivateProfileInt(L"Delays", L"MinDelay", 1000, cfgPath);
     MaxDelay = GetPrivateProfileInt(L"Delays", L"MaxDelay", 3000, cfgPath);
-    NumberOfTrials = GetPrivateProfileInt(L"Trial", L"NumberOfTrials", 5, cfgPath);
 
+    if (MinDelay <= 0 || MaxDelay <= 0 || MaxDelay < MinDelay) {
+        MessageBox(NULL, L"Invalid delay values in the configuration!", L"Error", MB_OK);
+        exit(1);
+    }
+
+    EarlyResetDelay = GetPrivateProfileInt(L"Delays", L"EarlyRestDelay", 3000, cfgPath);
     InputRejectionDelay = GetPrivateProfileInt(L"Delays", L"InputRejectionDelay", 150, cfgPath);
+
+    NumberOfTrials = GetPrivateProfileInt(L"Trial", L"NumberOfTrials", 5, cfgPath);
+    if (NumberOfTrials <= 0) {
+        MessageBox(NULL, L"Invalid number of trials in the configuration!", L"Error", MB_OK);
+        exit(1);
+    }
+
 
     GetPrivateProfileString(L"Colors", L"EarlyTextColor", L"", buffer, 255, cfgPath);
     swscanf_s(buffer, L"%d,%d,%d", &EarlyTextColor[0], &EarlyTextColor[1], &EarlyTextColor[2]);
@@ -359,5 +374,14 @@ void LoadConfig() {
     // Initialize the memory
     for (int i = 0; i < NumberOfTrials; i++) {
         reactionTimes[i] = 0.0;
+    }
+}
+
+void CheckColorValidity(COLORREF color[]) {
+    if (!CHECK_RGB_VALUE(color[0]) ||
+        !CHECK_RGB_VALUE(color[1]) ||
+        !CHECK_RGB_VALUE(color[2])) {
+        MessageBox(NULL, L"Invalid color values in the configuration!", L"Error", MB_OK);
+        exit(1);
     }
 }
