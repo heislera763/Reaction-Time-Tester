@@ -7,6 +7,7 @@
 #define TIMER_REACT 2
 #define TIMER_EARLY 3
 #define CHECK_RGB_VALUE(v) ((v) >= 0 && (v) <= 255)
+#define MAXMINDELAY (rand() % (MaxDelay - MinDelay + 1)) + MinDelay
 
 COLORREF ReadyColor[3], ReactColor[3], EarlyColor[3], ResultColor[3], EarlyTextColor[3], ResultsTextColor[3];
 int MinDelay, MaxDelay, NumberOfTrials, EarlyResetDelay, InputRejectionDelay;
@@ -31,6 +32,7 @@ void HandleEarlyClick(HWND hwnd);
 void ResetAll(HWND hwnd);
 void LoadConfig();
 void CheckColorValidity(COLORREF color[]);
+void BrushCleanup();
 
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
     QueryPerformanceFrequency(&freq);
@@ -77,10 +79,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 
     if (hwnd == NULL) {
         MessageBox(NULL, L"Failed to create window", L"Error", MB_OK);
-        DeleteObject(hReadyBrush);
-        DeleteObject(hReactBrush);
-        DeleteObject(hEarlyBrush);
-        DeleteObject(hResultBrush);
+        BrushCleanup();
         return 0;
     }
 
@@ -91,7 +90,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     srand((unsigned)time(NULL));
 
     // Schedule the transition to green after a random delay.
-    int delay = (rand() % (MaxDelay - MinDelay + 1)) + MinDelay;
+    int delay = MAXMINDELAY;
     SetTimer(hwnd, TIMER_READY, delay, NULL);
 
     // Enter the standard Windows message loop.
@@ -102,10 +101,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     }
 
     // Cleanup.
-    DeleteObject(hReadyBrush);
-    DeleteObject(hReactBrush);
-    DeleteObject(hEarlyBrush);
-    DeleteObject(hResultBrush);
+    BrushCleanup();
 
     free(reactionTimes);
 
@@ -191,7 +187,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         case TIMER_READY: {
             isReadyForReact = TRUE;
             KillTimer(hwnd, TIMER_READY);
-            int greenDelay = (rand() % (MaxDelay - MinDelay + 1)) + MinDelay;
+            int greenDelay = MAXMINDELAY;
             SetTimer(hwnd, TIMER_REACT, greenDelay, NULL);
         } break;
 
@@ -262,7 +258,7 @@ void ResetLogic(HWND hwnd) {
     isReadyForReact = FALSE;
 
     // Schedule the transition to green after a random delay.
-    int delay = (rand() % (MaxDelay - MinDelay + 1)) + MinDelay;
+    int delay = MAXMINDELAY;
     SetTimer(hwnd, TIMER_READY, delay, NULL);
 
     // Force repaint.
@@ -380,4 +376,11 @@ void CheckColorValidity(COLORREF color[]) {
         MessageBox(NULL, L"Invalid color values in the configuration!", L"Error", MB_OK);
         exit(1);
     }
+}
+
+void BrushCleanup() {
+    DeleteObject(hReadyBrush);
+    DeleteObject(hReactBrush);
+    DeleteObject(hEarlyBrush);
+    DeleteObject(hResultBrush);
 }
