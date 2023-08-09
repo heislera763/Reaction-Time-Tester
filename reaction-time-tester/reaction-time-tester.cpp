@@ -40,28 +40,38 @@ HBRUSH hReadyBrush, hReactBrush, hEarlyBrush, hResultBrush;
 
 // Forward declarations for window procedure and other functions.
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+
+// Utility functions
+void HandleError(const wchar_t* errorMessage);
+void CheckColorValidity(COLORREF color[]);
+void GetColorFromConfig(const wchar_t* cfgPath, const wchar_t* colorName, COLORREF* targetColorArray, wchar_t* buffer);
+void LoadColorConfiguration(const wchar_t* cfgPath, const wchar_t* colorName, COLORREF* targetColorArray);
+bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength);
+
+// Configuration and setup functions
+void ValidateDelays();
+void LoadTrialConfiguration(const wchar_t* cfgPath);
+void LoadTextColorConfiguration(const wchar_t* cfgPath);
+void AllocateMemoryForReactionTimes();
+void LoadConfig();
+
+// Input handling functions
+void RegisterForRawKeyboardInput(HWND hwnd);
+void RegisterForRawMouseInput(HWND hwnd);
+void HandleInput(HWND hwnd);
+void HandleGenericKeyboardInput(HWND hwnd);
+void HandleRawKeyboardInput(RAWINPUT* raw, HWND hwnd);
+void HandleGenericMouseInput(HWND hwnd);
+void HandleRawMouseInput(RAWINPUT* raw, HWND hwnd);
+
+// Main application logic functions
 void ResetLogic(HWND hwnd);
 void HandleReactClick(HWND hwnd);
 void HandleEarlyClick(HWND hwnd);
 void ResetAll(HWND hwnd);
-void LoadConfig();
-bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength);
-void LoadColorConfiguration(const wchar_t* cfgPath, const wchar_t* colorName, COLORREF* targetColorArray);
-void CheckColorValidity(COLORREF color[]);
+
+// Cleanup function
 void BrushCleanup();
-void ValidateDelays();
-void LoadTrialConfiguration(const wchar_t* cfgPath);
-void LoadTextColorConfiguration(const wchar_t* cfgPath);
-void GetColorFromConfig(const wchar_t* cfgPath, const wchar_t* colorName, COLORREF* targetColorArray, wchar_t* buffer);
-void AllocateMemoryForReactionTimes();
-void HandleError(const wchar_t* errorMessage);
-void RegisterForRawKeyboardInput(HWND hwnd);
-void RegisterForRawMouseInput(HWND hwnd);
-void HandleInput(HWND hwnd);
-void HandleRawKeyboardInput(RAWINPUT* raw, HWND hwnd);
-void HandleGenericKeyboardInput(HWND hwnd);
-void HandleRawMouseInput(RAWINPUT* raw, HWND hwnd);
-void HandleGenericMouseInput(HWND hwnd);
 
 
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
@@ -301,54 +311,38 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     return 0;
 }
 
-void ResetLogic(HWND hwnd) {
 
-    // Kill all timers.
-    KillTimer(hwnd, TIMER_READY);
-    KillTimer(hwnd, TIMER_REACT);
-    KillTimer(hwnd, TIMER_EARLY);
-
-    // Reset state flags.
-    isReact = FALSE;
-    isEarly = FALSE;
-    isResult = FALSE;
-    isReadyForReact = FALSE;
-
-    // Schedule the transition to green after a random delay.
-    SetTimer(hwnd, TIMER_READY, MAXMINDELAY, NULL);
-
-    // Force repaint.
-    InvalidateRect(hwnd, NULL, TRUE);
+// Utility Functions
+void HandleError(const wchar_t* errorMessage) {
+    MessageBox(NULL, errorMessage, L"Error", MB_OK);
+    exit(1);
 }
 
-void HandleReactClick(HWND hwnd) {
-    QueryPerformanceCounter(&endTime);
-    double timeTaken = ((double)(endTime.QuadPart - startTime.QuadPart) / freq.QuadPart) * 1000;
-
-    reactionTimes[currentAttempt % NumberOfTrials] = timeTaken;
-    currentAttempt++;
-
-    isReact = FALSE; // No longer green once clicked.
-    isResult = TRUE;   // Change to grey to show the result.
-    InvalidateRect(hwnd, NULL, TRUE);  // Force repaint.
-}
-
-void HandleEarlyClick(HWND hwnd) {
-    isEarly = TRUE;
-    isReadyForReact = FALSE;
-    SetTimer(hwnd, TIMER_EARLY, EarlyResetDelay, NULL);  // Show the red screen for 1.5 seconds.
-    InvalidateRect(hwnd, NULL, TRUE);
-}
-
-void ResetAll(HWND hwnd) {
-    currentAttempt = 0;
-    for (int i = 0; i < NumberOfTrials; i++) {
-        reactionTimes[i] = 0;
+void CheckColorValidity(COLORREF color[]) {
+    if (!CHECK_RGB_VALUE(color[0]) ||
+        !CHECK_RGB_VALUE(color[1]) ||
+        !CHECK_RGB_VALUE(color[2])) {
+        MessageBox(NULL, L"Invalid color values in the configuration!", L"Error", MB_OK);
+        exit(1);
     }
-    ResetLogic(hwnd);
 }
 
-bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength){
+void GetColorFromConfig(const wchar_t* cfgPath, const wchar_t* colorName, COLORREF* targetColorArray, wchar_t* buffer) {
+    GetPrivateProfileString(L"Colors", colorName, L"", buffer, MAX_PATH, cfgPath);
+    if (wcslen(buffer) == 0) {
+        HandleError(L"Failed to read color configuration");
+    }
+    swscanf_s(buffer, L"%d,%d,%d", &targetColorArray[0], &targetColorArray[1], &targetColorArray[2]);
+}
+
+void LoadColorConfiguration(const wchar_t* cfgPath, const wchar_t* colorName, COLORREF* targetColorArray) {
+    wchar_t buffer[255];
+    GetPrivateProfileString(L"Colors", colorName, L"", buffer, sizeof(buffer) / sizeof(wchar_t), cfgPath);
+    swscanf_s(buffer, L"%d,%d,%d", &targetColorArray[0], &targetColorArray[1], &targetColorArray[2]);
+    CheckColorValidity(targetColorArray);
+}
+
+bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength) {
     wchar_t exePath[MAX_PATH];
     wchar_t defaultCfgPath[MAX_PATH];
 
@@ -398,6 +392,37 @@ bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength){
 }
 
 
+// Configuration and setup functions
+void ValidateDelays() {
+    if (MinDelay <= 0 || MaxDelay <= 0 || MaxDelay < MinDelay || VirtualDebounce < 0 || EarlyResetDelay <= 0) {
+        MessageBox(NULL, L"Invalid delay values in the configuration!", L"Error", MB_OK);
+        exit(1);
+    }
+}
+
+void LoadTrialConfiguration(const wchar_t* cfgPath) {
+    NumberOfTrials = GetPrivateProfileInt(L"Trial", L"NumberOfTrials", DEFAULT_NUM_TRIALS, cfgPath);
+    if (NumberOfTrials <= 0) {
+        MessageBox(NULL, L"Invalid number of trials in the configuration!", L"Error", MB_OK);
+        exit(1);
+    }
+}
+
+void LoadTextColorConfiguration(const wchar_t* cfgPath) {
+    wchar_t buffer[MAX_PATH];
+    GetColorFromConfig(cfgPath, L"EarlyTextColor", EarlyTextColor, buffer);
+    GetColorFromConfig(cfgPath, L"ResultsTextColor", ResultsTextColor, buffer);
+}
+
+void AllocateMemoryForReactionTimes() {
+    reactionTimes = (double*)malloc(sizeof(double) * NumberOfTrials);
+    if (reactionTimes == NULL) {
+        MessageBox(NULL, L"Failed to allocate memory for reaction times!", L"Error", MB_OK);
+        exit(1);
+    }
+    memset(reactionTimes, 0, sizeof(double) * NumberOfTrials);
+}
+
 void LoadConfig() {
     wchar_t cfgPath[MAX_PATH];
 
@@ -431,72 +456,7 @@ void LoadConfig() {
 }
 
 
-void ValidateDelays() {
-    if (MinDelay <= 0 || MaxDelay <= 0 || MaxDelay < MinDelay || VirtualDebounce < 0 || EarlyResetDelay <=0) {
-        MessageBox(NULL, L"Invalid delay values in the configuration!", L"Error", MB_OK);
-        exit(1);
-    }
-}
-
-void LoadTrialConfiguration(const wchar_t* cfgPath) {
-    NumberOfTrials = GetPrivateProfileInt(L"Trial", L"NumberOfTrials", DEFAULT_NUM_TRIALS, cfgPath);
-    if (NumberOfTrials <= 0) {
-        MessageBox(NULL, L"Invalid number of trials in the configuration!", L"Error", MB_OK);
-        exit(1);
-    }
-}
-
-void GetColorFromConfig(const wchar_t* cfgPath, const wchar_t* colorName, COLORREF* targetColorArray, wchar_t* buffer) {
-    GetPrivateProfileString(L"Colors", colorName, L"", buffer, MAX_PATH, cfgPath);
-    if (wcslen(buffer) == 0) {
-        HandleError(L"Failed to read color configuration");
-    }
-    swscanf_s(buffer, L"%d,%d,%d", &targetColorArray[0], &targetColorArray[1], &targetColorArray[2]);
-}
-
-void LoadTextColorConfiguration(const wchar_t* cfgPath) {
-    wchar_t buffer[MAX_PATH];
-    GetColorFromConfig(cfgPath, L"EarlyTextColor", EarlyTextColor, buffer);
-    GetColorFromConfig(cfgPath, L"ResultsTextColor", ResultsTextColor, buffer);
-}
-
-void AllocateMemoryForReactionTimes() {
-    reactionTimes = (double*)malloc(sizeof(double) * NumberOfTrials);
-    if (reactionTimes == NULL) {
-        MessageBox(NULL, L"Failed to allocate memory for reaction times!", L"Error", MB_OK);
-        exit(1);
-    }
-    memset(reactionTimes, 0, sizeof(double) * NumberOfTrials);
-}
-
-void LoadColorConfiguration(const wchar_t* cfgPath, const wchar_t* colorName, COLORREF* targetColorArray) {
-    wchar_t buffer[255];
-    GetPrivateProfileString(L"Colors", colorName, L"", buffer, sizeof(buffer) / sizeof(wchar_t), cfgPath);
-    swscanf_s(buffer, L"%d,%d,%d", &targetColorArray[0], &targetColorArray[1], &targetColorArray[2]);
-    CheckColorValidity(targetColorArray);
-}
-
-void CheckColorValidity(COLORREF color[]) {
-    if (!CHECK_RGB_VALUE(color[0]) ||
-        !CHECK_RGB_VALUE(color[1]) ||
-        !CHECK_RGB_VALUE(color[2])) {
-        MessageBox(NULL, L"Invalid color values in the configuration!", L"Error", MB_OK);
-        exit(1);
-    }
-}
-
-void BrushCleanup() {
-    if (hReadyBrush) DeleteObject(hReadyBrush);
-    if (hReactBrush) DeleteObject(hReactBrush);
-    if (hEarlyBrush) DeleteObject(hEarlyBrush);
-    if (hResultBrush) DeleteObject(hResultBrush);
-}
-
-void HandleError(const wchar_t* errorMessage) {
-    MessageBox(NULL, errorMessage, L"Error", MB_OK);
-    exit(1);
-}
-
+// Input handling functions
 void RegisterForRawKeyboardInput(HWND hwnd) {
     RAWINPUTDEVICE rid{};
 
@@ -525,7 +485,7 @@ void RegisterForRawMouseInput(HWND hwnd) {
     }
 }
 
-void HandleInput(HWND hwnd) {
+void HandleInput(HWND hwnd) {   // Primary "game" logic is done here
     if (isReact) {
         HandleReactClick(hwnd);
     }
@@ -542,6 +502,21 @@ void HandleInput(HWND hwnd) {
         HandleEarlyClick(hwnd);
     }
     Sleep(VirtualDebounce); // Rudimentary "debounce." Seems to work okay for this application
+}
+
+void HandleGenericKeyboardInput(HWND hwnd) {
+    for (int vk = 0x30; vk <= 0x5A; vk++) {
+        if (vk <= 0x39 || (vk >= 0x41 && vk <= 0x5A)) {
+            bool isKeyPressed = GetAsyncKeyState(vk) & 0x8000;
+            if (isKeyPressed && !keyStates[vk]) {
+                HandleInput(hwnd);
+                keyStates[vk] = 1; // Latch the key state
+            }
+            else if (!isKeyPressed && keyStates[vk]) {
+                keyStates[vk] = 0; // Unlatch on key release
+            }
+        }
+    }
 }
 
 void HandleRawKeyboardInput(RAWINPUT* raw, HWND hwnd) {
@@ -562,18 +537,16 @@ void HandleRawKeyboardInput(RAWINPUT* raw, HWND hwnd) {
     }
 }
 
-void HandleGenericKeyboardInput(HWND hwnd) {
-    for (int vk = 0x30; vk <= 0x5A; vk++) {
-        if (vk <= 0x39 || (vk >= 0x41 && vk <= 0x5A)) {
-            bool isKeyPressed = GetAsyncKeyState(vk) & 0x8000;
-            if (isKeyPressed && !keyStates[vk]) {
-                HandleInput(hwnd);
-                keyStates[vk] = 1; // Latch the key state
-            }
-            else if (!isKeyPressed && keyStates[vk]) {
-                keyStates[vk] = 0; // Unlatch on key release
-            }
-        }
+void HandleGenericMouseInput(HWND hwnd) {
+    static int wasButtonPressed = 0; // 0: not pressed, 1: pressed
+    int isButtonPressed = GetAsyncKeyState(VK_LBUTTON) & 0x8000;
+
+    if (isButtonPressed && !wasButtonPressed) { // Check for transition from up to down
+        HandleInput(hwnd);
+        wasButtonPressed = 1; // Latch the button state
+    }
+    else if (!isButtonPressed && wasButtonPressed) { // Check for transition from down to up
+        wasButtonPressed = 0; // Unlatch immediately on button release
     }
 }
 
@@ -589,15 +562,59 @@ void HandleRawMouseInput(RAWINPUT* raw, HWND hwnd) {
     }
 }
 
-void HandleGenericMouseInput(HWND hwnd) {
-    static int wasButtonPressed = 0; // 0: not pressed, 1: pressed
-    int isButtonPressed = GetAsyncKeyState(VK_LBUTTON) & 0x8000;
 
-    if (isButtonPressed && !wasButtonPressed) { // Check for transition from up to down
-        HandleInput(hwnd);
-        wasButtonPressed = 1; // Latch the button state
+// Main application logic functions
+void ResetLogic(HWND hwnd) {
+    // Kill all timers.
+    KillTimer(hwnd, TIMER_READY);
+    KillTimer(hwnd, TIMER_REACT);
+    KillTimer(hwnd, TIMER_EARLY);
+
+    // Reset state flags.
+    isReact = FALSE;
+    isEarly = FALSE;
+    isResult = FALSE;
+    isReadyForReact = FALSE;
+
+    // Schedule the transition to green after a random delay.
+    SetTimer(hwnd, TIMER_READY, MAXMINDELAY, NULL);
+
+    // Force repaint.
+    InvalidateRect(hwnd, NULL, TRUE);
+}
+
+void HandleReactClick(HWND hwnd) {
+    QueryPerformanceCounter(&endTime);
+    double timeTaken = ((double)(endTime.QuadPart - startTime.QuadPart) / freq.QuadPart) * 1000;
+
+    reactionTimes[currentAttempt % NumberOfTrials] = timeTaken;
+    currentAttempt++;
+
+    isReact = FALSE; // No longer green once clicked.
+    isResult = TRUE;   // Change to grey to show the result.
+    InvalidateRect(hwnd, NULL, TRUE);  // Force repaint.
+}
+
+void HandleEarlyClick(HWND hwnd) {
+    isEarly = TRUE;
+    isReadyForReact = FALSE;
+    SetTimer(hwnd, TIMER_EARLY, EarlyResetDelay, NULL);  // Show the red screen for 1.5 seconds.
+    InvalidateRect(hwnd, NULL, TRUE);
+}
+
+void ResetAll(HWND hwnd) {
+    currentAttempt = 0;
+    for (int i = 0; i < NumberOfTrials; i++) {
+        reactionTimes[i] = 0;
     }
-    else if (!isButtonPressed && wasButtonPressed) { // Check for transition from down to up
-        wasButtonPressed = 0; // Unlatch immediately on button release
-    }
+    ResetLogic(hwnd);
+}
+
+
+// Cleanup Function
+void BrushCleanup() {
+    if (hReadyBrush) DeleteObject(hReadyBrush);
+    if (hReactBrush) DeleteObject(hReactBrush);
+    if (hEarlyBrush) DeleteObject(hEarlyBrush);
+    if (hResultBrush) DeleteObject(hResultBrush);
 }
