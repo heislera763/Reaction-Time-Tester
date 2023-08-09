@@ -33,6 +33,7 @@ void ResetAll(HWND hwnd);
 void LoadConfig();
 void CheckColorValidity(COLORREF color[]);
 void BrushCleanup();
+void LoadColorConfiguration(const wchar_t* cfgPath, const wchar_t* colorName, COLORREF* targetColorArray);
 
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
     QueryPerformanceFrequency(&freq);
@@ -90,8 +91,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     srand((unsigned)time(NULL));
 
     // Schedule the transition to green after a random delay.
-    int delay = MAXMINDELAY;
-    SetTimer(hwnd, TIMER_READY, delay, NULL);
+    SetTimer(hwnd, TIMER_READY, MAXMINDELAY, NULL);
 
     // Enter the standard Windows message loop.
     MSG msg = {};
@@ -149,9 +149,12 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             DEFAULT_PITCH | FF_DONTCARE, L"Arial");
         SelectObject(hdc, hFont);
 
+        wchar_t buf[100] = { 0 }; // Initialize buffer
+
+        // Set text and color based on conditions
         if (isResult) {
             SetTextColor(hdc, RGB(ResultsTextColor[0], ResultsTextColor[1], ResultsTextColor[2]));
-            wchar_t buf[100];
+
             if (currentAttempt < NumberOfTrials) {
                 swprintf_s(buf, 100, L"Last: %.2lfms\nComplete %d trials for average.", reactionTimes[(currentAttempt - 1 + NumberOfTrials) % NumberOfTrials], NumberOfTrials);
             }
@@ -164,14 +167,14 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 swprintf_s(buf, 100, L"Last: %.2lfms\nAverage (last %d): %.2lfms", reactionTimes[(currentAttempt - 1) % NumberOfTrials], NumberOfTrials, average);
             }
 
+            // Calculate rectangle for the text and center it
             RECT textRect;
             SetRectEmpty(&textRect);
-            DrawText(hdc, buf, -1, &textRect, DT_CALCRECT | DT_WORDBREAK); // Calculate the rectangle required for text
-
+            DrawText(hdc, buf, -1, &textRect, DT_CALCRECT | DT_WORDBREAK);
             RECT centeredRect = rect;
-            centeredRect.top += (rect.bottom - textRect.bottom) / 2; // Adjust the top for vertical centering
-
+            centeredRect.top += (rect.bottom - textRect.bottom) / 2;
             DrawText(hdc, buf, -1, &centeredRect, DT_CENTER | DT_WORDBREAK);
+
         }
         else if (isEarly) {
             SetTextColor(hdc, RGB(EarlyTextColor[0], EarlyTextColor[1], EarlyTextColor[2]));
@@ -182,18 +185,18 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         EndPaint(hwnd, &ps);
     } break;
 
+
     case WM_TIMER:
         switch (wParam) {
-        case TIMER_READY: {
+        case TIMER_READY:
             isReadyForReact = TRUE;
             KillTimer(hwnd, TIMER_READY);
-            int greenDelay = MAXMINDELAY;
-            SetTimer(hwnd, TIMER_REACT, greenDelay, NULL);
-        } break;
+            SetTimer(hwnd, TIMER_REACT, MAXMINDELAY, NULL);
+            break;
 
         case TIMER_REACT:
             if (isReadyForReact) {
-                isReact = TRUE; // Change the screen to green.
+                isReact = TRUE;
                 isReadyForReact = FALSE;
                 QueryPerformanceCounter(&startTime); // Start the timer for reaction time.
                 InvalidateRect(hwnd, NULL, TRUE); // Force repaint.
@@ -206,33 +209,29 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         }
         break;
 
+
     case WM_LBUTTONDOWN:
     case WM_KEYDOWN:
         // If it's an alphabetical key or a mouse click, proceed.
-        if ((uMsg == WM_KEYDOWN && wParam >= 0x41 && wParam <= 0x5A) || uMsg == WM_LBUTTONDOWN) {
+        if (uMsg != WM_KEYDOWN || (wParam >= 0x41 && wParam <= 0x5A)) {
             if (isReact) {
                 HandleReactClick(hwnd);
             }
-            else if (isEarly) {
-                ResetLogic(hwnd);
-            }
-            else if (isResult) {
-                if (currentAttempt == NumberOfTrials) {
+            else if (isEarly || isResult) {
+                if (isResult && currentAttempt == NumberOfTrials) {
                     currentAttempt = 0;
                     for (int i = 0; i < NumberOfTrials; i++) {
                         reactionTimes[i] = 0;
                     }
-                    ResetLogic(hwnd);
                 }
-                else {
-                    ResetLogic(hwnd);
-                }
+                ResetLogic(hwnd);
             }
             else {
                 HandleEarlyClick(hwnd);
             }
         }
         break;
+
 
     case WM_DESTROY:
         PostQuitMessage(0);
@@ -258,8 +257,7 @@ void ResetLogic(HWND hwnd) {
     isReadyForReact = FALSE;
 
     // Schedule the transition to green after a random delay.
-    int delay = MAXMINDELAY;
-    SetTimer(hwnd, TIMER_READY, delay, NULL);
+    SetTimer(hwnd, TIMER_READY, MAXMINDELAY, NULL);
 
     // Force repaint.
     InvalidateRect(hwnd, NULL, TRUE);
@@ -308,23 +306,10 @@ void LoadConfig() {
     // Construct the path for reaction.cfg.
     swprintf_s(cfgPath, MAX_PATH, L"%s%s", exePath, L"reaction.cfg");
 
-    wchar_t buffer[255];
-
-    GetPrivateProfileString(L"Colors", L"ReadyColor", L"", buffer, 255, cfgPath);
-    swscanf_s(buffer, L"%d,%d,%d", &ReadyColor[0], &ReadyColor[1], &ReadyColor[2]);
-    CheckColorValidity(ReadyColor);
-
-    GetPrivateProfileString(L"Colors", L"ReactColor", L"", buffer, 255, cfgPath);
-    swscanf_s(buffer, L"%d,%d,%d", &ReactColor[0], &ReactColor[1], &ReactColor[2]);
-    CheckColorValidity(ReactColor);
-
-    GetPrivateProfileString(L"Colors", L"EarlyColor", L"", buffer, 255, cfgPath);
-    swscanf_s(buffer, L"%d,%d,%d", &EarlyColor[0], &EarlyColor[1], &EarlyColor[2]);
-    CheckColorValidity(EarlyColor);
-
-    GetPrivateProfileString(L"Colors", L"ResultColor", L"", buffer, 255, cfgPath);
-    swscanf_s(buffer, L"%d,%d,%d", &ResultColor[0], &ResultColor[1], &ResultColor[2]);
-    CheckColorValidity(ResultColor);
+    LoadColorConfiguration(cfgPath, L"ReadyColor", ReadyColor);
+    LoadColorConfiguration(cfgPath, L"ReactColor", ReactColor);
+    LoadColorConfiguration(cfgPath, L"EarlyColor", EarlyColor);
+    LoadColorConfiguration(cfgPath, L"ResultColor", ResultColor);
 
     MinDelay = GetPrivateProfileInt(L"Delays", L"MinDelay", 1000, cfgPath);
     MaxDelay = GetPrivateProfileInt(L"Delays", L"MaxDelay", 3000, cfgPath);
@@ -343,13 +328,13 @@ void LoadConfig() {
         exit(1);
     }
 
+    wchar_t buffer[255];  // Declare the buffer here
 
     GetPrivateProfileString(L"Colors", L"EarlyTextColor", L"", buffer, 255, cfgPath);
     swscanf_s(buffer, L"%d,%d,%d", &EarlyTextColor[0], &EarlyTextColor[1], &EarlyTextColor[2]);
 
     GetPrivateProfileString(L"Colors", L"ResultsTextColor", L"", buffer, 255, cfgPath);
     swscanf_s(buffer, L"%d,%d,%d", &ResultsTextColor[0], &ResultsTextColor[1], &ResultsTextColor[2]);
-
 
     // If previously allocated, free the memory
     if (reactionTimes) {
@@ -383,4 +368,11 @@ void BrushCleanup() {
     DeleteObject(hReactBrush);
     DeleteObject(hEarlyBrush);
     DeleteObject(hResultBrush);
+}
+
+void LoadColorConfiguration(const wchar_t* cfgPath, const wchar_t* colorName, COLORREF* targetColorArray) {
+    wchar_t buffer[255];
+    GetPrivateProfileString(L"Colors", colorName, L"", buffer, sizeof(buffer) / sizeof(wchar_t), cfgPath);
+    swscanf_s(buffer, L"%d,%d,%d", &targetColorArray[0], &targetColorArray[1], &targetColorArray[2]);
+    CheckColorValidity(targetColorArray);
 }
