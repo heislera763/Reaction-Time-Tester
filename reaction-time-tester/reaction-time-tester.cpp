@@ -45,7 +45,7 @@ void HandleReactClick(HWND hwnd);
 void HandleEarlyClick(HWND hwnd);
 void ResetAll(HWND hwnd);
 void LoadConfig();
-bool GetConfigPath(wchar_t* cfgPath, size_t maxLength);
+bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength);
 void LoadColorConfiguration(const wchar_t* cfgPath, const wchar_t* colorName, COLORREF* targetColorArray);
 void CheckColorValidity(COLORREF color[]);
 void BrushCleanup();
@@ -348,8 +348,9 @@ void ResetAll(HWND hwnd) {
     ResetLogic(hwnd);
 }
 
-bool GetConfigPath(wchar_t* cfgPath, size_t maxLength) {
+bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength){
     wchar_t exePath[MAX_PATH];
+    wchar_t defaultCfgPath[MAX_PATH];
 
     if (!GetModuleFileName(NULL, exePath, MAX_PATH)) {
         MessageBox(NULL, L"Failed to get module file name", L"Error", MB_OK);
@@ -362,13 +363,45 @@ bool GetConfigPath(wchar_t* cfgPath, size_t maxLength) {
     }
 
     swprintf_s(cfgPath, maxLength, L"%s%s", exePath, L"reaction.cfg");
+    swprintf_s(defaultCfgPath, MAX_PATH, L"%s%s", exePath, L"default.cfg");
+
+    // Check if reaction.cfg exists
+    if (GetFileAttributes(cfgPath) == INVALID_FILE_ATTRIBUTES) {
+        // If reaction.cfg does not exist, copy from default.cfg
+
+        FILE* defaultFile;
+        errno_t err1 = _wfopen_s(&defaultFile, defaultCfgPath, L"rb"); // open in binary mode for reading
+        if (err1 != 0 || !defaultFile) {
+            MessageBox(NULL, L"Failed to open default.cfg", L"Error", MB_OK);
+            return false;
+        }
+
+        FILE* newFile;
+        errno_t err2 = _wfopen_s(&newFile, cfgPath, L"wb");  // open in binary mode for writing
+        if (err2 != 0 || !newFile) {
+            fclose(defaultFile);
+            MessageBox(NULL, L"Failed to create reaction.cfg", L"Error", MB_OK);
+            return false;
+        }
+
+        char buffer[1024];
+        size_t bytesRead;
+        while ((bytesRead = fread(buffer, 1, sizeof(buffer), defaultFile)) > 0) {
+            fwrite(buffer, 1, bytesRead, newFile);
+        }
+
+        fclose(newFile);
+        fclose(defaultFile);
+    }
+
     return true;  // Successfully obtained the config path
 }
+
 
 void LoadConfig() {
     wchar_t cfgPath[MAX_PATH];
 
-    if (!GetConfigPath(cfgPath, MAX_PATH)) {
+    if (!InitializeConfigFileAndPath(cfgPath, MAX_PATH)) {
         exit(1); // Exiting as the path acquisition failed
     }
 
