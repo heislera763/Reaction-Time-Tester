@@ -8,6 +8,11 @@
 #define TIMER_EARLY 3
 #define CHECK_RGB_VALUE(v) ((v) >= 0 && (v) <= 255)
 #define MAXMINDELAY (rand() % (MaxDelay - MinDelay + 1)) + MinDelay
+#define DEFAULT_MIN_DELAY 1000
+#define DEFAULT_MAX_DELAY 3000
+#define DEFAULT_EARLY_RESET_DELAY 3000
+#define DEFAULT_INPUT_REJECTION_DELAY 150
+#define DEFAULT_NUM_TRIALS 5
 
 COLORREF ReadyColor[3], ReactColor[3], EarlyColor[3], ResultColor[3], EarlyTextColor[3], ResultsTextColor[3];
 int MinDelay, MaxDelay, NumberOfTrials, EarlyResetDelay, InputRejectionDelay;
@@ -21,6 +26,9 @@ LARGE_INTEGER startTime, endTime, freq; // For high-resolution timing.
 double* reactionTimes = NULL; // Array to store the last 5 reaction times.
 int currentAttempt = 0;
 
+// Font for text.
+HFONT hFont;
+
 // Brushes for painting the window background.
 HBRUSH hReadyBrush, hReactBrush, hEarlyBrush, hResultBrush;
 
@@ -31,9 +39,15 @@ void HandleReactClick(HWND hwnd);
 void HandleEarlyClick(HWND hwnd);
 void ResetAll(HWND hwnd);
 void LoadConfig();
+void LoadColorConfiguration(const wchar_t* cfgPath, const wchar_t* colorName, COLORREF* targetColorArray);
 void CheckColorValidity(COLORREF color[]);
 void BrushCleanup();
-void LoadColorConfiguration(const wchar_t* cfgPath, const wchar_t* colorName, COLORREF* targetColorArray);
+void ValidateDelays();
+void LoadTrialConfiguration(const wchar_t* cfgPath);
+void LoadTextColorConfiguration(const wchar_t* cfgPath);
+void GetColorFromConfig(const wchar_t* cfgPath, const wchar_t* colorName, COLORREF* targetColorArray, wchar_t* buffer);
+void AllocateMemoryForReactionTimes();
+void HandleError(const wchar_t* errorMessage);
 
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
     QueryPerformanceFrequency(&freq);
@@ -55,11 +69,6 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 
     // Initialize brushes for painting.
     LoadConfig(); // Load configuration at the start
-
-    hReadyBrush = CreateSolidBrush(RGB(ReadyColor[0], ReadyColor[1], ReadyColor[2]));
-    hReactBrush = CreateSolidBrush(RGB(ReactColor[0], ReactColor[1], ReactColor[2]));
-    hEarlyBrush = CreateSolidBrush(RGB(EarlyColor[0], EarlyColor[1], EarlyColor[2]));
-    hResultBrush = CreateSolidBrush(RGB(ResultColor[0], ResultColor[1], ResultColor[2]));
 
     // Create the main window.
     HWND hwnd = CreateWindowEx(
@@ -92,6 +101,11 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 
     // Schedule the transition to green after a random delay.
     SetTimer(hwnd, TIMER_READY, MAXMINDELAY, NULL);
+
+    // Prepare font before message loop
+    hFont = CreateFont(30, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, ANSI_CHARSET,
+        OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
+        DEFAULT_PITCH | FF_DONTCARE, L"Arial");
 
     // Enter the standard Windows message loop.
     MSG msg = {};
@@ -144,9 +158,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         // Display text based on the state.
         SetBkMode(hdc, TRANSPARENT);
         SetTextColor(hdc, RGB(255, 255, 255)); // White text.
-        HFONT hFont = CreateFont(30, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, ANSI_CHARSET,
-            OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
-            DEFAULT_PITCH | FF_DONTCARE, L"Arial");
         SelectObject(hdc, hFont);
 
         wchar_t buf[100] = { 0 }; // Initialize buffer
@@ -181,7 +192,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             DrawText(hdc, L"Too early!", -1, &rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
         }
 
-        DeleteObject(hFont);
         EndPaint(hwnd, &ps);
     } break;
 
@@ -294,64 +304,84 @@ void LoadConfig() {
     wchar_t exePath[MAX_PATH];
     wchar_t cfgPath[MAX_PATH];
 
-    // Get the full path of the executable.
-    GetModuleFileName(NULL, exePath, MAX_PATH);
-
-    // Extract the directory from the full path.
-    wchar_t* lastSlash = wcsrchr(exePath, '\\');
-    if (lastSlash) {
-        *(lastSlash + 1) = L'\0'; // Terminate the string after the last slash.
+    if (!GetModuleFileName(NULL, exePath, MAX_PATH)) {
+        MessageBox(NULL, L"Failed to get module file name", L"Error", MB_OK);
+        exit(1);
     }
 
-    // Construct the path for reaction.cfg.
+    wchar_t* lastSlash = wcsrchr(exePath, '\\');
+    if (lastSlash) {
+        *(lastSlash + 1) = L'\0';
+    }
+
     swprintf_s(cfgPath, MAX_PATH, L"%s%s", exePath, L"reaction.cfg");
 
     LoadColorConfiguration(cfgPath, L"ReadyColor", ReadyColor);
     LoadColorConfiguration(cfgPath, L"ReactColor", ReactColor);
     LoadColorConfiguration(cfgPath, L"EarlyColor", EarlyColor);
     LoadColorConfiguration(cfgPath, L"ResultColor", ResultColor);
+    hReadyBrush = CreateSolidBrush(RGB(ReadyColor[0], ReadyColor[1], ReadyColor[2]));
+    hReactBrush = CreateSolidBrush(RGB(ReactColor[0], ReactColor[1], ReactColor[2]));
+    hEarlyBrush = CreateSolidBrush(RGB(EarlyColor[0], EarlyColor[1], EarlyColor[2]));
+    hResultBrush = CreateSolidBrush(RGB(ResultColor[0], ResultColor[1], ResultColor[2]));
 
-    MinDelay = GetPrivateProfileInt(L"Delays", L"MinDelay", 1000, cfgPath);
-    MaxDelay = GetPrivateProfileInt(L"Delays", L"MaxDelay", 3000, cfgPath);
+    MinDelay = GetPrivateProfileInt(L"Delays", L"MinDelay", DEFAULT_MIN_DELAY, cfgPath);
+    MaxDelay = GetPrivateProfileInt(L"Delays", L"MaxDelay", DEFAULT_MAX_DELAY, cfgPath);
 
+    ValidateDelays();
+
+    EarlyResetDelay = GetPrivateProfileInt(L"Delays", L"EarlyRestDelay", DEFAULT_EARLY_RESET_DELAY, cfgPath);
+    InputRejectionDelay = GetPrivateProfileInt(L"Delays", L"InputRejectionDelay", DEFAULT_INPUT_REJECTION_DELAY, cfgPath);
+
+    LoadTrialConfiguration(cfgPath);
+    LoadTextColorConfiguration(cfgPath);
+
+    AllocateMemoryForReactionTimes();
+}
+
+void ValidateDelays() {
     if (MinDelay <= 0 || MaxDelay <= 0 || MaxDelay < MinDelay) {
         MessageBox(NULL, L"Invalid delay values in the configuration!", L"Error", MB_OK);
         exit(1);
     }
+}
 
-    EarlyResetDelay = GetPrivateProfileInt(L"Delays", L"EarlyRestDelay", 3000, cfgPath);
-    InputRejectionDelay = GetPrivateProfileInt(L"Delays", L"InputRejectionDelay", 150, cfgPath);
-
-    NumberOfTrials = GetPrivateProfileInt(L"Trial", L"NumberOfTrials", 5, cfgPath);
+void LoadTrialConfiguration(const wchar_t* cfgPath) {
+    NumberOfTrials = GetPrivateProfileInt(L"Trial", L"NumberOfTrials", DEFAULT_NUM_TRIALS, cfgPath);
     if (NumberOfTrials <= 0) {
         MessageBox(NULL, L"Invalid number of trials in the configuration!", L"Error", MB_OK);
         exit(1);
     }
+}
 
-    wchar_t buffer[255];  // Declare the buffer here
-
-    GetPrivateProfileString(L"Colors", L"EarlyTextColor", L"", buffer, 255, cfgPath);
-    swscanf_s(buffer, L"%d,%d,%d", &EarlyTextColor[0], &EarlyTextColor[1], &EarlyTextColor[2]);
-
-    GetPrivateProfileString(L"Colors", L"ResultsTextColor", L"", buffer, 255, cfgPath);
-    swscanf_s(buffer, L"%d,%d,%d", &ResultsTextColor[0], &ResultsTextColor[1], &ResultsTextColor[2]);
-
-    // If previously allocated, free the memory
-    if (reactionTimes) {
-        free(reactionTimes);
+void GetColorFromConfig(const wchar_t* cfgPath, const wchar_t* colorName, COLORREF* targetColorArray, wchar_t* buffer) {
+    GetPrivateProfileString(L"Colors", colorName, L"", buffer, MAX_PATH, cfgPath);
+    if (wcslen(buffer) == 0) {
+        HandleError(L"Failed to read color configuration");
     }
+    swscanf_s(buffer, L"%d,%d,%d", &targetColorArray[0], &targetColorArray[1], &targetColorArray[2]);
+}
 
-    // Allocate memory based on NumberOfTrials
+void LoadTextColorConfiguration(const wchar_t* cfgPath) {
+    wchar_t buffer[MAX_PATH];
+    GetColorFromConfig(cfgPath, L"EarlyTextColor", EarlyTextColor, buffer);
+    GetColorFromConfig(cfgPath, L"ResultsTextColor", ResultsTextColor, buffer);
+}
+
+void AllocateMemoryForReactionTimes() {
     reactionTimes = (double*)malloc(sizeof(double) * NumberOfTrials);
-    if (!reactionTimes) {
-        MessageBox(NULL, L"Memory allocation failed!", L"Error", MB_OK);
+    if (reactionTimes == NULL) {
+        MessageBox(NULL, L"Failed to allocate memory for reaction times!", L"Error", MB_OK);
         exit(1);
     }
+    memset(reactionTimes, 0, sizeof(double) * NumberOfTrials);
+}
 
-    // Initialize the memory
-    for (int i = 0; i < NumberOfTrials; i++) {
-        reactionTimes[i] = 0.0;
-    }
+void LoadColorConfiguration(const wchar_t* cfgPath, const wchar_t* colorName, COLORREF* targetColorArray) {
+    wchar_t buffer[255];
+    GetPrivateProfileString(L"Colors", colorName, L"", buffer, sizeof(buffer) / sizeof(wchar_t), cfgPath);
+    swscanf_s(buffer, L"%d,%d,%d", &targetColorArray[0], &targetColorArray[1], &targetColorArray[2]);
+    CheckColorValidity(targetColorArray);
 }
 
 void CheckColorValidity(COLORREF color[]) {
@@ -364,15 +394,14 @@ void CheckColorValidity(COLORREF color[]) {
 }
 
 void BrushCleanup() {
-    DeleteObject(hReadyBrush);
-    DeleteObject(hReactBrush);
-    DeleteObject(hEarlyBrush);
-    DeleteObject(hResultBrush);
+    if (hReadyBrush) DeleteObject(hReadyBrush);
+    if (hReactBrush) DeleteObject(hReactBrush);
+    if (hEarlyBrush) DeleteObject(hEarlyBrush);
+    if (hResultBrush) DeleteObject(hResultBrush);
 }
 
-void LoadColorConfiguration(const wchar_t* cfgPath, const wchar_t* colorName, COLORREF* targetColorArray) {
-    wchar_t buffer[255];
-    GetPrivateProfileString(L"Colors", colorName, L"", buffer, sizeof(buffer) / sizeof(wchar_t), cfgPath);
-    swscanf_s(buffer, L"%d,%d,%d", &targetColorArray[0], &targetColorArray[1], &targetColorArray[2]);
-    CheckColorValidity(targetColorArray);
+
+void HandleError(const wchar_t* errorMessage) {
+    MessageBox(NULL, errorMessage, L"Error", MB_OK);
+    exit(1);
 }
