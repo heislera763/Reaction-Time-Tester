@@ -1,4 +1,4 @@
-# Reaction Time Tester
+# Reaction Time Tester:
 
 This is a basic program allowing users to measure their reaction times. A basic configuration file is included to let users easily change some functionality.
 
