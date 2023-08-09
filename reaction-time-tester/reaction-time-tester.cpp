@@ -17,6 +17,7 @@
 COLORREF ReadyColor[3], ReactColor[3], EarlyColor[3], ResultColor[3], EarlyTextColor[3], ResultsTextColor[3];
 int MinDelay, MaxDelay, NumberOfTrials, EarlyResetDelay, InputRejectionDelay;
 int RawKeyboardEnable = 0; // Hardcoded for now while raw keyboard input is broken
+int TotalTrialNumber = 0;
 
 // Global variables to maintain the program's state.
 BOOL isReact = FALSE;
@@ -165,17 +166,17 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
         // Display text based on the state.
         SetBkMode(hdc, TRANSPARENT);
-        SetTextColor(hdc, RGB(255, 255, 255)); // White text.
+        SetTextColor(hdc, RGB(255, 255, 255)); // Default to white text.
         SelectObject(hdc, hFont);
 
         wchar_t buf[100] = { 0 }; // Initialize buffer
 
-        // Set text and color based on conditions
         if (isResult) {
             SetTextColor(hdc, RGB(ResultsTextColor[0], ResultsTextColor[1], ResultsTextColor[2]));
+            TotalTrialNumber++;
 
             if (currentAttempt < NumberOfTrials) {
-                swprintf_s(buf, 100, L"Last: %.2lfms\nComplete %d trials for average.", reactionTimes[(currentAttempt - 1 + NumberOfTrials) % NumberOfTrials], NumberOfTrials);
+                swprintf_s(buf, 100, L"Last: %.2lfms\nComplete %d trials for average.\nTrials so far: %d", reactionTimes[(currentAttempt - 1 + NumberOfTrials) % NumberOfTrials], NumberOfTrials, TotalTrialNumber);
             }
             else {
                 double total = 0;
@@ -183,25 +184,26 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                     total += reactionTimes[i];
                 }
                 double average = total / NumberOfTrials;
-                swprintf_s(buf, 100, L"Last: %.2lfms\nAverage (last %d): %.2lfms", reactionTimes[(currentAttempt - 1) % NumberOfTrials], NumberOfTrials, average);
+                swprintf_s(buf, 100, L"Last: %.2lfms\nAverage (last %d): %.2lfms\nTrials so far: %d", reactionTimes[(currentAttempt - 1) % NumberOfTrials], NumberOfTrials, average, TotalTrialNumber);
             }
-
-            // Calculate rectangle for the text and center it
-            RECT textRect;
-            SetRectEmpty(&textRect);
-            DrawText(hdc, buf, -1, &textRect, DT_CALCRECT | DT_WORDBREAK);
-            RECT centeredRect = rect;
-            centeredRect.top += (rect.bottom - textRect.bottom) / 2;
-            DrawText(hdc, buf, -1, &centeredRect, DT_CENTER | DT_WORDBREAK);
 
         }
         else if (isEarly) {
             SetTextColor(hdc, RGB(EarlyTextColor[0], EarlyTextColor[1], EarlyTextColor[2]));
-            DrawText(hdc, L"Too early!", -1, &rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+            swprintf_s(buf, 100, L"Too early!\nTrials so far: %d", TotalTrialNumber);
         }
+
+        // Calculate rectangle for the text and display it.
+        RECT textRect;
+        SetRectEmpty(&textRect);
+        DrawText(hdc, buf, -1, &textRect, DT_CALCRECT | DT_WORDBREAK);
+        RECT centeredRect = rect;
+        centeredRect.top += (rect.bottom - textRect.bottom) / 2;
+        DrawText(hdc, buf, -1, &centeredRect, DT_CENTER | DT_WORDBREAK);
 
         EndPaint(hwnd, &ps);
     } break;
+
 
     case WM_TIMER:
         switch (wParam) {
