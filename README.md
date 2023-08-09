@@ -1,6 +1,6 @@
 # Reaction Time Tester
 
-This is a program I made while testing out GPT4 via ChatGPT. It took a lot of precision prompting, manual adjustments, and lots of diagnostics to get it into this state, but I am happy with the results.
+This is a program I made while testing out GPT4 via ChatGPT. It took a lot of verbose prompting, manual adjustments, and lots of diagnostics to get it into this state, but I am happy with the results.
 
 From my experimentation on a Windows 11 system it seems pretty robust in it's current state, but I am not able to test on other systems easily at this time.
 
