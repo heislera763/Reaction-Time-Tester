@@ -20,6 +20,6 @@ The program works like so: It starts in the inital "Ready" state, in which the u
 
 # Background Info:
 
-This is a program I made while testing out the capabilities of GPT4 (via ChatGPT). It took a lot of verbose prompting, manual adjustments, and lots of diagnostics to get it into this state, but I am happy with the results. Please note that the configuration file was kept as simple as possible to make it easier for GPT4 to deal with. As a result of this, the program doesn't work correctly without reaction.cfg and there is also minimum-effort bounds checking... in other words, unsafe values might be *unsafe*.
+This is a program I made while testing out the capabilities of GPT4 (via ChatGPT). It took a lot of verbose prompting, manual adjustments, and lots of diagnostics to get it into this state, but I am happy with the results. Please note that the program doesn't work correctly without reaction.cfg and there is also minimal bounds checking... in other words, unsafe values might be *unsafe*.
 
 From my experimentation on a Windows 11 system it seems pretty robust in its current state, but I am not able to test on other systems easily at this time.
