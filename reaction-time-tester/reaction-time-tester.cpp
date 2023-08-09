@@ -95,13 +95,23 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     // Initialize brushes for painting.
     LoadConfig(); // Load configuration at the start
 
-    // Create the main window.
+    // Get the dimensions of the main display
+    int screenWidth = GetSystemMetrics(SM_CXSCREEN);
+    int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+
+    // Calculate the position to center the window
+    int windowWidth = 1280; // Your window width
+    int windowHeight = 720; // Your window height
+    int posX = (screenWidth - windowWidth) / 2;
+    int posY = (screenHeight - windowHeight) / 2;
+
+    // Create the main window centered on the main display
     HWND hwnd = CreateWindowEx(
         0,
         CLASS_NAME,
         L"reaction-time-tester",
         WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT, CW_USEDEFAULT, 1280, 720, // Updated window size.
+        posX, posY, windowWidth, windowHeight,
         NULL,
         NULL,
         hInstance,
@@ -160,11 +170,36 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
     case WM_SETCURSOR:
-        if (LOWORD(lParam) == HTCLIENT) {
+        switch (LOWORD(lParam)) {
+        case HTCLIENT:
+            // Set the cursor to a hand cursor for specific areas in the client area
+            // You can implement your own logic here to determine cursor change areas
+            // For example, checking if the mouse is over clickable elements.
             SetCursor(LoadCursor(NULL, IDC_HAND));
-            return TRUE;
+            break;
+        case HTLEFT:
+        case HTRIGHT:
+            SetCursor(LoadCursor(NULL, IDC_SIZEWE)); // Left or right border (resize cursor)
+            break;
+        case HTTOP:
+        case HTBOTTOM:
+            SetCursor(LoadCursor(NULL, IDC_SIZENS)); // Top or bottom border (resize cursor)
+            break;
+        case HTTOPLEFT:
+        case HTBOTTOMRIGHT:
+            SetCursor(LoadCursor(NULL, IDC_SIZENWSE)); // Top-left or bottom-right corner (diagonal resize cursor)
+            break;
+        case HTTOPRIGHT:
+        case HTBOTTOMLEFT:
+            SetCursor(LoadCursor(NULL, IDC_SIZENESW)); // Top-right or bottom-left corner (diagonal resize cursor)
+            break;
+        default:
+            SetCursor(LoadCursor(NULL, IDC_ARROW)); // Use the default cursor
+            break;
         }
-        break;
+        return TRUE;
+
+
 
     case WM_PAINT: {
         PAINTSTRUCT ps;
@@ -273,10 +308,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
         RAWINPUT* raw = (RAWINPUT*)lpb;
 
-        if (raw->header.dwType == RIM_TYPEKEYBOARD && RawKeyboardEnable == 1) {
+        if (raw->header.dwType == RIM_TYPEKEYBOARD && RawKeyboardEnable == 1) { // Handle raw keyboard inputs
             HandleRawKeyboardInput(raw, hwnd);
         }
-        else if (raw->header.dwType == RIM_TYPEMOUSE && RawMouseEnable == 1) {
+        else if (raw->header.dwType == RIM_TYPEMOUSE && RawMouseEnable == 1) { // Handle raw mouse inputs
             HandleRawMouseInput(raw, hwnd);
         }
 
@@ -284,7 +319,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     }
     break;
 
-    // Handle non-raw keyboard input
+    // Handle generic keyboard input
     case WM_KEYDOWN:
     case WM_KEYUP:
         if (RawKeyboardEnable == 0) {
@@ -292,7 +327,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         }
         break;
 
-        // Handle non-raw mouse input
+    // Handle generic mouse input
     case WM_LBUTTONDOWN:
     case WM_LBUTTONUP:
         if (RawMouseEnable == 0) {
