@@ -16,12 +16,15 @@
 
 COLORREF ReadyColor[3], ReactColor[3], EarlyColor[3], ResultColor[3], EarlyTextColor[3], ResultsTextColor[3];
 int MinDelay, MaxDelay, NumberOfTrials, EarlyResetDelay, InputRejectionDelay;
+int RawKeyboardEnable = 0; // Hardcoded for now while raw keyboard input is broken
 
 // Global variables to maintain the program's state.
 BOOL isReact = FALSE;
 BOOL isEarly = FALSE;
 BOOL isResult = FALSE;
 BOOL isReadyForReact = FALSE;
+BOOL isRawInputEnabled = FALSE;
+
 LARGE_INTEGER startTime, endTime, freq; // For high-resolution timing.
 double* reactionTimes = NULL; // Array to store the last 5 reaction times.
 int currentAttempt = 0;
@@ -48,6 +51,8 @@ void LoadTextColorConfiguration(const wchar_t* cfgPath);
 void GetColorFromConfig(const wchar_t* cfgPath, const wchar_t* colorName, COLORREF* targetColorArray, wchar_t* buffer);
 void AllocateMemoryForReactionTimes();
 void HandleError(const wchar_t* errorMessage);
+void RegisterForRawInput(HWND hwnd);
+void HandleInput(HWND hwnd);
 
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
     QueryPerformanceFrequency(&freq);
@@ -82,6 +87,9 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
         hInstance,
         NULL
     );
+
+    // Raw input
+    RegisterForRawInput(hwnd);
 
     // Display the window.
     ShowWindow(hwnd, nCmdShow);
@@ -195,7 +203,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         EndPaint(hwnd, &ps);
     } break;
 
-
     case WM_TIMER:
         switch (wParam) {
         case TIMER_READY:
@@ -219,28 +226,56 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         }
         break;
 
+    case WM_INPUT:
+    {
+        if (RawKeyboardEnable == 1) {  // Raw input is enabled
+            UINT dwSize;
+            GetRawInputData((HRAWINPUT)lParam, RID_INPUT, NULL, &dwSize, sizeof(RAWINPUTHEADER));
+            LPBYTE lpb = new BYTE[dwSize];
 
-    case WM_LBUTTONDOWN:
-    case WM_KEYDOWN:
-        // If it's an alphabetical key or a mouse click, proceed.
-        if (uMsg != WM_KEYDOWN || (wParam >= 0x41 && wParam <= 0x5A)) {
-            if (isReact) {
-                HandleReactClick(hwnd);
+            if (lpb == NULL) {
+                return 0;
             }
-            else if (isEarly || isResult) {
-                if (isResult && currentAttempt == NumberOfTrials) {
-                    currentAttempt = 0;
-                    for (int i = 0; i < NumberOfTrials; i++) {
-                        reactionTimes[i] = 0;
+
+            if (GetRawInputData((HRAWINPUT)lParam, RID_INPUT, lpb, &dwSize, sizeof(RAWINPUTHEADER)) != dwSize) {
+                MessageBox(NULL, L"GetRawInputData did not return correct size!", L"Error", MB_OK);
+            }
+
+            RAWINPUT* raw = (RAWINPUT*)lpb;
+
+            if (raw->header.dwType == RIM_TYPEKEYBOARD && (raw->data.keyboard.Flags & RI_KEY_MAKE)) {
+                if ((raw->data.keyboard.VKey >= 0x30 && raw->data.keyboard.VKey <= 0x39) || // '0' to '9'
+                    (raw->data.keyboard.VKey >= 0x41 && raw->data.keyboard.VKey <= 0x5A))   // 'A' to 'Z'
+                {
+                    HandleInput(hwnd);
+                }
+            }
+            else if (raw->header.dwType == RIM_TYPEMOUSE && (raw->data.mouse.usButtonFlags & RI_MOUSE_LEFT_BUTTON_DOWN)) {
+                HandleInput(hwnd);
+            }
+            delete[] lpb;
+        }
+        else {  // Use generic Windows input
+            bool keyFound = false;
+            for (int vk = 0x30; vk <= 0x5A; vk++) {  // Check all alphanumeric keys
+                if (vk <= 0x39 || (vk >= 0x41 && vk <= 0x5A)) {
+                    if (GetAsyncKeyState(vk) & 0x8000) {
+                        HandleInput(hwnd);
+                        keyFound = true;
+                        break;
                     }
                 }
-                ResetLogic(hwnd);
             }
-            else {
-                HandleEarlyClick(hwnd);
+            if (!keyFound && (GetAsyncKeyState(VK_LBUTTON) & 0x8000)) {
+                // Handle the left mouse click logic
+                HandleInput(hwnd);
             }
         }
-        break;
+    }
+    break;
+
+
+
 
 
     case WM_DESTROY:
@@ -404,4 +439,46 @@ void BrushCleanup() {
 void HandleError(const wchar_t* errorMessage) {
     MessageBox(NULL, errorMessage, L"Error", MB_OK);
     exit(1);
+}
+
+void RegisterForRawInput(HWND hwnd) {
+    RAWINPUTDEVICE rid[2];
+
+    // Register for keyboard raw input
+    rid[0].usUsagePage = 0x01;
+    rid[0].usUsage = 0x06;
+    rid[0].dwFlags = 0;
+    rid[0].hwndTarget = hwnd;
+
+    // Register for mouse raw input
+    rid[1].usUsagePage = 0x01;
+    rid[1].usUsage = 0x02;
+    rid[1].dwFlags = 0;
+    rid[1].hwndTarget = hwnd;
+
+    if (RegisterRawInputDevices(rid, 2, sizeof(rid[0]))) {
+        isRawInputEnabled = true;  // set the flag if raw input registration is successful
+    }
+    else {
+        MessageBox(NULL, L"Failed to register raw input devices", L"Error", MB_OK);
+    }
+}
+
+
+void HandleInput(HWND hwnd) {
+    if (isReact) {
+        HandleReactClick(hwnd);
+    }
+    else if (isEarly || isResult) {
+        if (isResult && currentAttempt == NumberOfTrials) {
+            currentAttempt = 0;
+            for (int i = 0; i < NumberOfTrials; i++) {
+                reactionTimes[i] = 0;
+            }
+        }
+        ResetLogic(hwnd);
+    }
+    else {
+        HandleEarlyClick(hwnd);
+    }
 }
