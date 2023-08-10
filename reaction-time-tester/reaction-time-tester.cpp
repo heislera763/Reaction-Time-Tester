@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <stdio.h>
+#include "Resource.h"
 
 #define TIMER_READY 1
 #define TIMER_REACT 2
@@ -33,6 +34,9 @@ wchar_t logFileName[MAX_PATH]; // Log file name global for ease
 wchar_t fontName[MAX_PATH];
 wchar_t fontStyle[MAX_PATH];
 int fontSize;
+
+// Window content hover check
+bool isCursorOverClientArea = false;
 
 // Define states
 typedef enum {
@@ -205,36 +209,55 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
+    case WM_CREATE:
+    {
+        // Load the icon from the resource
+        HICON hIcon = (HICON)LoadImage(GetModuleHandle(NULL), MAKEINTRESOURCE(IDI_ICON1), IMAGE_ICON, 32, 32, 0);
+
+        // Set the icon for the window
+        SendMessage(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
+
+        // For the Alt-Tab dialog
+        HICON hIconLarge = (HICON)LoadImage(GetModuleHandle(NULL), MAKEINTRESOURCE(IDI_ICON1), IMAGE_ICON, 64, 64, 0);
+        SendMessage(hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIconLarge);
+    }
+    break;
+
     case WM_SETCURSOR:
         switch (LOWORD(lParam)) {
         case HTCLIENT:
             // Set the cursor to a hand cursor
             // We may want to implement further logic here at some point
             // For example, checking if the mouse is over clickable elements.
+            isCursorOverClientArea = true;
             SetCursor(LoadCursor(NULL, IDC_HAND));
             break;
         case HTLEFT:
         case HTRIGHT:
+            isCursorOverClientArea = false;  // Add this line
             SetCursor(LoadCursor(NULL, IDC_SIZEWE)); // Left or right border (resize cursor)
             break;
         case HTTOP:
         case HTBOTTOM:
+            isCursorOverClientArea = false;  // Add this line
             SetCursor(LoadCursor(NULL, IDC_SIZENS)); // Top or bottom border (resize cursor)
             break;
         case HTTOPLEFT:
         case HTBOTTOMRIGHT:
+            isCursorOverClientArea = false;  // Add this line
             SetCursor(LoadCursor(NULL, IDC_SIZENWSE)); // Top-left or bottom-right corner (diagonal resize cursor)
             break;
         case HTTOPRIGHT:
         case HTBOTTOMLEFT:
+            isCursorOverClientArea = false;  // Add this line
             SetCursor(LoadCursor(NULL, IDC_SIZENESW)); // Top-right or bottom-left corner (diagonal resize cursor)
             break;
         default:
+            isCursorOverClientArea = false;
             SetCursor(LoadCursor(NULL, IDC_ARROW)); // Use the default cursor
             break;
         }
         return TRUE;
-
 
 
     case WM_PAINT: {
@@ -640,6 +663,9 @@ bool RegisterForRawInput(HWND hwnd, USHORT usage) {
 }
 
 void HandleInput(HWND hwnd) {   // Primary "game" logic is done here
+    if (!isCursorOverClientArea) {
+        return;  // Don't process the input if the cursor is not over the client area
+    }
     if (currentState == STATE_REACT) {
         HandleReactClick(hwnd);
     }
