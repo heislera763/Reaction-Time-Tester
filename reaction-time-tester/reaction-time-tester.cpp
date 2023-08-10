@@ -58,10 +58,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 void HandleError(const wchar_t* errorMessage);
 void ValidateColors(COLORREF color[]);
 void ValidateDelays();
-bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength);
 void RemoveComment(wchar_t* str);
 
 // Configuration and setup functions
+bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength);
 void LoadColorConfiguration(const wchar_t* cfgPath, const wchar_t* sectionName, const wchar_t* colorName, COLORREF* targetColorArray);
 void LoadFontConfiguration(const wchar_t* cfgPath, wchar_t* targetFontName, size_t maxLength, int* fontSize, wchar_t* fontStyle, size_t fontStyleLength);
 void LoadTrialConfiguration(const wchar_t* cfgPath);
@@ -407,6 +407,22 @@ void ValidateDelays() {
     }
 }
 
+void RemoveComment(wchar_t* str) { //Filter comments out when reading strings from .cfg
+    wchar_t* semicolonPos = wcschr(str, L';');
+    if (semicolonPos) {
+        *semicolonPos = L'\0';  // Set the position of the semicolon to null terminator.
+    }
+
+    // Trim trailing spaces if needed
+    size_t len = wcslen(str);
+    while (len > 0 && iswspace(str[len - 1])) {
+        str[len - 1] = L'\0';
+        len--;
+    }
+}
+
+
+// Configuration and setup functions
 bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength) {
     wchar_t exePath[MAX_PATH];
     wchar_t defaultCfgPath[MAX_PATH];
@@ -456,22 +472,6 @@ bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength) {
     return true;  // Successfully obtained the config path
 }
 
-void RemoveComment(wchar_t* str) { //Filter comments out when reading strings from .cfg
-    wchar_t* semicolonPos = wcschr(str, L';');
-    if (semicolonPos) {
-        *semicolonPos = L'\0';  // Set the position of the semicolon to null terminator.
-    }
-
-    // Trim trailing spaces if needed
-    size_t len = wcslen(str);
-    while (len > 0 && iswspace(str[len - 1])) {
-        str[len - 1] = L'\0';
-        len--;
-    }
-}
-
-
-// Configuration and setup functions
 void LoadColorConfiguration(const wchar_t* cfgPath, const wchar_t* sectionName, const wchar_t* colorName, COLORREF* targetColorArray) {
     wchar_t buffer[255];
     GetPrivateProfileString(sectionName, colorName, L"", buffer, sizeof(buffer) / sizeof(wchar_t), cfgPath);
@@ -509,7 +509,7 @@ void LoadTrialConfiguration(const wchar_t* cfgPath) {
 }
 
 void LoadTextColorConfiguration(const wchar_t* cfgPath) {
-    wchar_t buffer[MAX_PATH];
+    wchar_t buffer[MAX_PATH]{};
     LoadColorConfiguration(cfgPath, L"Fonts", L"EarlyFontColor", EarlyFontColor);
     LoadColorConfiguration(cfgPath, L"Fonts", L"ResultsFontColor", ResultsFontColor);
 }
