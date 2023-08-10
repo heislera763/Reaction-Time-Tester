@@ -1,5 +1,5 @@
 # Reaction Time Tester
-This program enables users to measure their reaction times. Users can customize the program's functionality using an included configuration file.
+This program allows users to measure their reaction times. Using an included configuration file, users can customize many of the program's functionalities. Key features include adjustable timing, raw input support, and a lightweight design.
 
 ### How it Works
 1. Ready State: The user waits for a prompt, visually indicated by the screen's color change.
@@ -14,4 +14,4 @@ This program enables users to measure their reaction times. Users can customize 
 3. The program currently supports only Windows and has only been test on Windows 11 Systems. Linux users may be able to achieve full functionality through compatibility layers like WINE.
 
 # Background Info
-This is a program I made while testing out the capabilities of GPT4 (via ChatGPT). It took a lot of verbose prompting, manual adjustments, and lots of diagnostics to get it into this state, but I am happy with the results.
+Most of my programming background is in embedded systems, and I've never created a win32 application before. So, I decided to use GPT-4 (via ChatGPT) to assist with the development. While it handled most of the heavy lifting, I've made the overarching design choices as well as some manual tweaks of my own.
