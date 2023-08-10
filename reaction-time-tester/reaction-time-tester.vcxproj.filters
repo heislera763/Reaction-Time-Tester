@@ -15,7 +15,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="reaction-time-tester.cpp">
+    <ClCompile Include="reaction-time-tester.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
