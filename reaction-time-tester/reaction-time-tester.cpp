@@ -294,7 +294,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 double average = total / NumberOfTrials;
                 swprintf_s(buf, 100, L"Last: %.2lfms\nAverage (last %d): %.2lfms\nTrials so far: %d", reactionTimes[(currentAttempt - 1) % NumberOfTrials], NumberOfTrials, average, TotalTrialNumber);
             }
-            if (LogEnable==1) AppendToLog(reactionTimes[(currentAttempt - 1 + NumberOfTrials) % NumberOfTrials], NumberOfTrials);
+            if (LogEnable==1) AppendToLog(reactionTimes[(currentAttempt - 1 + NumberOfTrials) % NumberOfTrials], TotalTrialNumber);
         }
         else if (currentState == STATE_EARLY) {
             SetTextColor(hdc, RGB(EarlyFontColor[0], EarlyFontColor[1], EarlyFontColor[2]));
