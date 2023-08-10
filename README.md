@@ -11,7 +11,7 @@ This program allows users to measure their reaction times. Using an included con
 1. Unzip the release folder wherever you want the program to be installed.
 2. Ensure that default.cfg is in the same directory as the program's executable for proper functioning.
    - On the first launch, the program duplicates the contents of default.cfg into reaction.cfg. Users can modify reaction.cfg to customize settings. However, avoid altering default.cfg. If you need to reset reaction.cfg to default settings, delete it.
-3. The program currently supports only Windows and has only been test on Windows 11 Systems. Linux users may be able to achieve full functionality through compatibility layers like WINE.
+3. The program currently supports only Windows and has only been tested on Windows 11 Systems. Linux users may be able to achieve full functionality through compatibility layers like WINE.
 
 # Background Info
 Most of my programming background is in embedded systems, and I've never created a win32 application before. So, I decided to use GPT-4 (via ChatGPT) to assist with the development. While it handled most of the heavy lifting, I've made the overarching design choices as well as some manual tweaks of my own.
