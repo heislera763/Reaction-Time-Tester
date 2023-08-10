@@ -32,11 +32,16 @@ wchar_t fontName[MAX_PATH];
 wchar_t fontStyle[MAX_PATH];
 int fontSize;
 
-// Global variables to maintain the program's state.
-BOOL isReact = FALSE;
-BOOL isEarly = FALSE;
-BOOL isResult = FALSE;
-BOOL isReadyForReact = FALSE;
+// Define states
+typedef enum {
+    STATE_READY,
+    STATE_REACT,
+    STATE_EARLY,
+    STATE_RESULT
+} ProgramState;
+
+// Global variable to maintain the program's state
+ProgramState currentState = STATE_READY;
 
 LARGE_INTEGER startTime, endTime, freq, lastInputTime; // For high-resolution timing.
 
@@ -64,8 +69,7 @@ void AllocateMemoryForReactionTimes();
 void LoadConfig();
 
 // Input handling functions
-bool RegisterForRawKeyboardInput(HWND hwnd);
-bool RegisterForRawMouseInput(HWND hwnd);
+bool RegisterForRawInput(HWND hwnd, USHORT usage);
 void HandleInput(HWND hwnd);
 void HandleGenericKeyboardInput(HWND hwnd);
 void HandleRawKeyboardInput(RAWINPUT* raw, HWND hwnd);
@@ -130,8 +134,8 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     bool keyboardRegistered = false;
     bool mouseRegistered = false;
 
-    if (RawKeyboardEnable == 1) keyboardRegistered = RegisterForRawKeyboardInput(hwnd);
-    if (RawMouseEnable == 1) mouseRegistered = RegisterForRawMouseInput(hwnd);
+    if (RawKeyboardEnable == 1) keyboardRegistered = RegisterForRawInput(hwnd, 0x06); // Attempt to Register Keyboard
+    if (RawMouseEnable == 1) mouseRegistered = RegisterForRawInput(hwnd, 0x02); // Attempt to Register Mouse
 
     if (RawInputDebug == 1) {
         wchar_t message[256];
@@ -149,8 +153,8 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
         return 0;
     }
 
-    // Set isReadyForGreen to TRUE right after displaying the window.
-    isReadyForReact = TRUE;
+    // Switch to ready state
+    currentState = STATE_READY;
 
     // Seed the random number generator.
     srand((unsigned)time(NULL));
@@ -232,18 +236,29 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
         // Decide which brush to use based on the current state.
         HBRUSH hBrush;
-        if (isReact) {
+        switch (currentState) {
+        case STATE_REACT:
             hBrush = hReactBrush;
-        }
-        else if (isEarly) {
+            break;
+
+        case STATE_EARLY:
             hBrush = hEarlyBrush;
-        }
-        else if (isResult) {
+            break;
+
+        case STATE_RESULT:
             hBrush = hResultBrush;
-        }
-        else {
+            break;
+
+        case STATE_READY:
             hBrush = hReadyBrush;
+            break;
+
+        default:
+            hBrush = hReadyBrush; // Default to a known brush to avoid undefined behavior.
+            MessageBox(hwnd, L"Invalid or undefined program state!", L"Error", MB_OK);
+            break;
         }
+
 
         // Paint the entire window with the selected brush.
         RECT rect;
@@ -257,7 +272,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
         wchar_t buf[100] = { 0 }; // Initialize buffer
 
-        if (isResult) {
+        if (currentState == STATE_RESULT) {
             SetTextColor(hdc, RGB(ResultsFontColor[0], ResultsFontColor[1], ResultsFontColor[2]));
             TotalTrialNumber++;
 
@@ -274,7 +289,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             }
 
         }
-        else if (isEarly) {
+        else if (currentState == STATE_EARLY) {
             SetTextColor(hdc, RGB(EarlyFontColor[0], EarlyFontColor[1], EarlyFontColor[2]));
             swprintf_s(buf, 100, L"Too early!\nTrials so far: %d", TotalTrialNumber);
         }
@@ -294,15 +309,14 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     case WM_TIMER:
         switch (wParam) {
         case TIMER_READY:
-            isReadyForReact = TRUE;
+            currentState = STATE_READY;
             KillTimer(hwnd, TIMER_READY);
             SetTimer(hwnd, TIMER_REACT, MAXMINDELAY, NULL);
             break;
 
         case TIMER_REACT:
-            if (isReadyForReact) {
-                isReact = TRUE;
-                isReadyForReact = FALSE;
+            if (currentState == STATE_READY) {
+                currentState = STATE_REACT;
                 QueryPerformanceCounter(&startTime); // Start the timer for reaction time.
                 InvalidateRect(hwnd, NULL, TRUE); // Force repaint.
             }
@@ -382,8 +396,7 @@ void CheckColorValidity(COLORREF color[]) {
     if (!CHECK_RGB_VALUE(color[0]) ||
         !CHECK_RGB_VALUE(color[1]) ||
         !CHECK_RGB_VALUE(color[2])) {
-        MessageBox(NULL, L"Invalid color values in the configuration!", L"Error", MB_OK);
-        exit(1);
+        HandleError(L"Invalid color values in the configuration!");
     }
 }
 
@@ -465,7 +478,7 @@ bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength) {
     return true;  // Successfully obtained the config path
 }
 
-void RemoveComment(wchar_t* str) { //Filter comment from any strings read from .cfg
+void RemoveComment(wchar_t* str) { //Filter comments out when reading strings from .cfg
     wchar_t* semicolonPos = wcschr(str, L';');
     if (semicolonPos) {
         *semicolonPos = L'\0';  // Set the position of the semicolon to null terminator.
@@ -483,16 +496,14 @@ void RemoveComment(wchar_t* str) { //Filter comment from any strings read from .
 // Configuration and setup functions
 void ValidateDelays() {
     if (MinDelay <= 0 || MaxDelay <= 0 || MaxDelay < MinDelay || VirtualDebounce < 0 || EarlyResetDelay <= 0) {
-        MessageBox(NULL, L"Invalid delay values in the configuration!", L"Error", MB_OK);
-        exit(1);
+        HandleError(L"Invalid delay values in the configuration!");
     }
 }
 
 void LoadTrialConfiguration(const wchar_t* cfgPath) {
     NumberOfTrials = GetPrivateProfileInt(L"Trial", L"NumberOfTrials", DEFAULT_NUM_TRIALS, cfgPath);
     if (NumberOfTrials <= 0) {
-        MessageBox(NULL, L"Invalid number of trials in the configuration!", L"Error", MB_OK);
-        exit(1);
+        HandleError(L"Invalid number of trials in the configuration!");
     }
 }
 
@@ -522,6 +533,7 @@ void LoadConfig() {
     LoadColorConfiguration(cfgPath, L"Colors", L"ReactColor", ReactColor);
     LoadColorConfiguration(cfgPath, L"Colors", L"EarlyColor", EarlyColor);
     LoadColorConfiguration(cfgPath, L"Colors", L"ResultColor", ResultColor);
+
     hReadyBrush = CreateSolidBrush(RGB(ReadyColor[0], ReadyColor[1], ReadyColor[2]));
     hReactBrush = CreateSolidBrush(RGB(ReactColor[0], ReactColor[1], ReactColor[2]));
     hEarlyBrush = CreateSolidBrush(RGB(EarlyColor[0], EarlyColor[1], EarlyColor[2]));
@@ -546,42 +558,26 @@ void LoadConfig() {
 
 
 // Input handling functions
-bool RegisterForRawKeyboardInput(HWND hwnd) {
+bool RegisterForRawInput(HWND hwnd, USHORT usage) {
     RAWINPUTDEVICE rid{};
-
     rid.usUsagePage = 0x01;
-    rid.usUsage = 0x06;
+    rid.usUsage = usage;
     rid.dwFlags = 0;
     rid.hwndTarget = hwnd;
 
     if (!RegisterRawInputDevices(&rid, 1, sizeof(rid))) {
-        MessageBox(NULL, L"Failed to register raw keyboard input device", L"Error", MB_OK);
-        return false;
-    }
-    return true;
-}
-
-bool RegisterForRawMouseInput(HWND hwnd) {
-    RAWINPUTDEVICE rid{};
-
-    rid.usUsagePage = 0x01;
-    rid.usUsage = 0x02;
-    rid.dwFlags = 0;
-    rid.hwndTarget = hwnd;
-
-    if (!RegisterRawInputDevices(&rid, 1, sizeof(rid))) {
-        MessageBox(NULL, L"Failed to register raw mouse input device", L"Error", MB_OK);
+        MessageBox(NULL, L"Failed to register raw input device", L"Error", MB_OK);
         return false;
     }
     return true;
 }
 
 void HandleInput(HWND hwnd) {   // Primary "game" logic is done here
-    if (isReact) {
+    if (currentState == STATE_REACT) {
         HandleReactClick(hwnd);
     }
-    else if (isEarly || isResult) {
-        if (isResult && currentAttempt == NumberOfTrials) {
+    else if ((currentState == STATE_EARLY) || (currentState == STATE_RESULT)) {
+        if ((currentState == STATE_RESULT) && currentAttempt == NumberOfTrials) {
             currentAttempt = 0;
             for (int i = 0; i < NumberOfTrials; i++) {
                 reactionTimes[i] = 0;
@@ -661,12 +657,8 @@ void ResetLogic(HWND hwnd) {
     KillTimer(hwnd, TIMER_REACT);
     KillTimer(hwnd, TIMER_EARLY);
 
-    // Reset state flags.
-    isReact = FALSE;
-    isEarly = FALSE;
-    isResult = FALSE;
-    isReadyForReact = FALSE;
-
+    currentState = STATE_READY;
+   
     // Schedule the transition to green after a random delay.
     SetTimer(hwnd, TIMER_READY, MAXMINDELAY, NULL);
 
@@ -681,15 +673,13 @@ void HandleReactClick(HWND hwnd) {
     reactionTimes[currentAttempt % NumberOfTrials] = timeTaken;
     currentAttempt++;
 
-    isReact = FALSE; // No longer green once clicked.
-    isResult = TRUE;   // Change to grey to show the result.
+    currentState = STATE_RESULT;   // Change to results screen
     InvalidateRect(hwnd, NULL, TRUE);  // Force repaint.
 }
 
 void HandleEarlyClick(HWND hwnd) {
-    isEarly = TRUE;
-    isReadyForReact = FALSE;
-    SetTimer(hwnd, TIMER_EARLY, EarlyResetDelay, NULL);  // Show the red screen for 1.5 seconds.
+    currentState = STATE_EARLY;  // Show the fail screen
+    SetTimer(hwnd, TIMER_EARLY, EarlyResetDelay, NULL);
     InvalidateRect(hwnd, NULL, TRUE);
 }
 
