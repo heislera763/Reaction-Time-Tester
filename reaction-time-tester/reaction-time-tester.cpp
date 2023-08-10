@@ -6,6 +6,7 @@
 #define TIMER_READY 1
 #define TIMER_REACT 2
 #define TIMER_EARLY 3
+#define TIME_BUFFER_SIZE 20
 #define CHECK_RGB_VALUE(v) ((v) >= 0 && (v) <= 255)
 #define MAXMINDELAY (rand() % (MaxDelay - MinDelay + 1)) + MinDelay
 #define DEFAULT_MIN_DELAY 1000
@@ -21,11 +22,12 @@
 #define DEFAULT_FONT_STYLE L"Regular"
 
 COLORREF ReadyColor[3], ReactColor[3], EarlyColor[3], ResultColor[3], EarlyFontColor[3], ResultsFontColor[3];
-int MinDelay, MaxDelay, NumberOfTrials, EarlyResetDelay, VirtualDebounce, RawKeyboardEnable, RawMouseEnable, RawInputDebug;
+int MinDelay, MaxDelay, NumberOfTrials, EarlyResetDelay, VirtualDebounce, RawKeyboardEnable, RawMouseEnable, RawInputDebug, LogEnable;
 double* reactionTimes = NULL; // Array to store the last 5 reaction times.
 int currentAttempt = 0;
 int TotalTrialNumber = 0;
 int keyStates[MAX_KEYS] = { 0 }; // 0: not pressed, 1: pressed
+wchar_t logFileName[MAX_PATH]; // Log file name global for ease
 
 // Font stuff
 wchar_t fontName[MAX_PATH];
@@ -68,6 +70,8 @@ void LoadTrialConfiguration(const wchar_t* cfgPath);
 void LoadTextColorConfiguration(const wchar_t* cfgPath);
 void AllocateMemoryForReactionTimes();
 void LoadConfig();
+void InitializeLogFileName();
+bool AppendToLog(double x, int y);
 
 // Input handling functions
 bool RegisterForRawInput(HWND hwnd, USHORT usage);
@@ -107,6 +111,8 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 
     // Initialize brushes for painting.
     LoadConfig(); // Load configuration at the start
+
+    if (LogEnable==1) InitializeLogFileName();
 
     // Get the dimensions of the main display
     int screenWidth = GetSystemMetrics(SM_CXSCREEN);
@@ -288,7 +294,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 double average = total / NumberOfTrials;
                 swprintf_s(buf, 100, L"Last: %.2lfms\nAverage (last %d): %.2lfms\nTrials so far: %d", reactionTimes[(currentAttempt - 1) % NumberOfTrials], NumberOfTrials, average, TotalTrialNumber);
             }
-
+            if (LogEnable==1) AppendToLog(reactionTimes[(currentAttempt - 1 + NumberOfTrials) % NumberOfTrials], NumberOfTrials);
         }
         else if (currentState == STATE_EARLY) {
             SetTextColor(hdc, RGB(EarlyFontColor[0], EarlyFontColor[1], EarlyFontColor[2]));
@@ -550,6 +556,8 @@ void LoadConfig() {
     RawMouseEnable = GetPrivateProfileInt(L"Toggles", L"RawMouseEnable", DEFAULT_RAWMOUSEENABLE, cfgPath);
     RawInputDebug = GetPrivateProfileInt(L"Toggles", L"RawInputDebug", 0, cfgPath); // Debug => No macro wanted
 
+    LogEnable = GetPrivateProfileInt(L"Toggles", L"LogEnable", 0, cfgPath);
+
     LoadTrialConfiguration(cfgPath);
     LoadTextColorConfiguration(cfgPath);
     LoadFontConfiguration(cfgPath, fontName, MAX_PATH, &fontSize, fontStyle, MAX_PATH);
@@ -557,6 +565,64 @@ void LoadConfig() {
     AllocateMemoryForReactionTimes();
 }
 
+void InitializeLogFileName() {
+    time_t t;
+    struct tm* tmp;
+
+    time(&t);
+    struct tm localTime;
+    localtime_s(&localTime, &t);
+    tmp = &localTime;
+
+    wchar_t timestamp[TIME_BUFFER_SIZE];
+    wcsftime(timestamp, TIME_BUFFER_SIZE, L"%Y%m%d%H%M%S", tmp);  // Format YYYYMMDDHHMMSS
+
+    swprintf_s(logFileName, MAX_PATH, L"log\\Log_%s.log", timestamp);
+}
+
+bool AppendToLog(double x, int y) {  // Handles log file operations
+    wchar_t exePath[MAX_PATH];
+    wchar_t logFilePath[MAX_PATH];
+    wchar_t logDirPath[MAX_PATH];  // Added for the directory path
+
+    // Get the directory where the executable is running
+    if (!GetModuleFileName(NULL, exePath, MAX_PATH)) {
+        HandleError(L"Failed to get module file name");
+    }
+    else {
+        wchar_t* lastSlash = wcsrchr(exePath, '\\');
+        if (lastSlash) {
+            *(lastSlash + 1) = L'\0';
+        }
+
+        // Create full path for the log directory
+        swprintf_s(logDirPath, MAX_PATH, L"%slog", exePath);
+
+        // Ensure log directory exists
+        if (!CreateDirectory(logDirPath, NULL) && GetLastError() != ERROR_ALREADY_EXISTS) {
+            HandleError(L"Failed to create log directory");
+        }
+        else {
+            // Create full path for the log file
+            swprintf_s(logFilePath, MAX_PATH, L"%s%s", exePath, logFileName);
+
+            // Append to the log file
+            FILE* logFile;
+            errno_t err = _wfopen_s(&logFile, logFilePath, L"a");
+            if (err != 0 || !logFile) {
+                wchar_t errorMessage[512];
+                _wcserror_s(errorMessage, sizeof(errorMessage) / sizeof(wchar_t), err);
+                HandleError(errorMessage);
+            }
+            else {
+                fwprintf(logFile, L"Trial %d: %f\n", y, x);
+                fclose(logFile);
+                return true;
+            }
+        }
+    }
+    return false;
+}
 
 // Input handling functions
 bool RegisterForRawInput(HWND hwnd, USHORT usage) {
