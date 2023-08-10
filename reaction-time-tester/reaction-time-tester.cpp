@@ -56,13 +56,14 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 // Utility functions
 void HandleError(const wchar_t* errorMessage);
-void CheckColorValidity(COLORREF color[]);
-void LoadColorConfiguration(const wchar_t* cfgPath, const wchar_t* sectionName, const wchar_t* colorName, COLORREF* targetColorArray);
+void ValidateColors(COLORREF color[]);
+void ValidateDelays();
 bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength);
 void RemoveComment(wchar_t* str);
 
 // Configuration and setup functions
-void ValidateDelays();
+void LoadColorConfiguration(const wchar_t* cfgPath, const wchar_t* sectionName, const wchar_t* colorName, COLORREF* targetColorArray);
+void LoadFontConfiguration(const wchar_t* cfgPath, wchar_t* targetFontName, size_t maxLength, int* fontSize, wchar_t* fontStyle, size_t fontStyleLength);
 void LoadTrialConfiguration(const wchar_t* cfgPath);
 void LoadTextColorConfiguration(const wchar_t* cfgPath);
 void AllocateMemoryForReactionTimes();
@@ -392,7 +393,7 @@ void HandleError(const wchar_t* errorMessage) {
     exit(1);
 }
 
-void CheckColorValidity(COLORREF color[]) {
+void ValidateColors(COLORREF color[]) {
     if (!CHECK_RGB_VALUE(color[0]) ||
         !CHECK_RGB_VALUE(color[1]) ||
         !CHECK_RGB_VALUE(color[2])) {
@@ -400,33 +401,10 @@ void CheckColorValidity(COLORREF color[]) {
     }
 }
 
-void LoadColorConfiguration(const wchar_t* cfgPath, const wchar_t* sectionName, const wchar_t* colorName, COLORREF* targetColorArray) {
-    wchar_t buffer[255];
-    GetPrivateProfileString(sectionName, colorName, L"", buffer, sizeof(buffer) / sizeof(wchar_t), cfgPath);
-
-    if (wcslen(buffer) == 0) {
-        HandleError(L"Failed to read color configuration");
+void ValidateDelays() {
+    if (MinDelay <= 0 || MaxDelay <= 0 || MaxDelay < MinDelay || VirtualDebounce < 0 || EarlyResetDelay <= 0) {
+        HandleError(L"Invalid delay values in the configuration!");
     }
-
-    swscanf_s(buffer, L"%d,%d,%d", &targetColorArray[0], &targetColorArray[1], &targetColorArray[2]);
-    CheckColorValidity(targetColorArray);
-}
-
-void LoadFontConfiguration(const wchar_t* cfgPath, wchar_t* targetFontName, size_t maxLength, int* fontSize, wchar_t* fontStyle, size_t fontStyleLength) {
-
-    // Load font name
-    GetPrivateProfileString(L"Fonts", L"FontName", DEFAULT_FONT_NAME, targetFontName, (DWORD)maxLength, cfgPath);
-    RemoveComment(targetFontName);
-    if (wcslen(targetFontName) == 0) {
-        HandleError(L"Failed to read font configuration");
-    }
-
-    // Load font size
-    *fontSize = GetPrivateProfileInt(L"Fonts", L"FontSize", DEFAULT_FONT_SIZE, cfgPath);
-
-    // Load font style
-    GetPrivateProfileString(L"Fonts", L"FontStyle", DEFAULT_FONT_STYLE, fontStyle, (DWORD)fontStyleLength, cfgPath);
-    RemoveComment(fontStyle);
 }
 
 bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength) {
@@ -494,10 +472,33 @@ void RemoveComment(wchar_t* str) { //Filter comments out when reading strings fr
 
 
 // Configuration and setup functions
-void ValidateDelays() {
-    if (MinDelay <= 0 || MaxDelay <= 0 || MaxDelay < MinDelay || VirtualDebounce < 0 || EarlyResetDelay <= 0) {
-        HandleError(L"Invalid delay values in the configuration!");
+void LoadColorConfiguration(const wchar_t* cfgPath, const wchar_t* sectionName, const wchar_t* colorName, COLORREF* targetColorArray) {
+    wchar_t buffer[255];
+    GetPrivateProfileString(sectionName, colorName, L"", buffer, sizeof(buffer) / sizeof(wchar_t), cfgPath);
+
+    if (wcslen(buffer) == 0) {
+        HandleError(L"Failed to read color configuration");
     }
+
+    swscanf_s(buffer, L"%d,%d,%d", &targetColorArray[0], &targetColorArray[1], &targetColorArray[2]);
+    ValidateColors(targetColorArray);
+}
+
+void LoadFontConfiguration(const wchar_t* cfgPath, wchar_t* targetFontName, size_t maxLength, int* fontSize, wchar_t* fontStyle, size_t fontStyleLength) {
+
+    // Load font name
+    GetPrivateProfileString(L"Fonts", L"FontName", DEFAULT_FONT_NAME, targetFontName, (DWORD)maxLength, cfgPath);
+    RemoveComment(targetFontName);
+    if (wcslen(targetFontName) == 0) {
+        HandleError(L"Failed to read font configuration");
+    }
+
+    // Load font size
+    *fontSize = GetPrivateProfileInt(L"Fonts", L"FontSize", DEFAULT_FONT_SIZE, cfgPath);
+
+    // Load font style
+    GetPrivateProfileString(L"Fonts", L"FontStyle", DEFAULT_FONT_STYLE, fontStyle, (DWORD)fontStyleLength, cfgPath);
+    RemoveComment(fontStyle);
 }
 
 void LoadTrialConfiguration(const wchar_t* cfgPath) {
