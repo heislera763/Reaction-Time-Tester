@@ -15,6 +15,8 @@
 #define DEFAULT_FONT_SIZE 32
 #define DEFAULT_FONT_NAME L"Arial"
 #define DEFAULT_FONT_STYLE L"Regular"
+#define DEFAULT_RESOLUTION_WIDTH 1280
+#define DEFAULT_RESOLUTION_HEIGHT 720
 #define TIME_BUFFER_SIZE 20
 #define MAX_KEYS 256
 #define TIMER_READY 1
@@ -22,13 +24,16 @@
 #define TIMER_EARLY 3
 #define TIMER_DEBOUNCE 4
 
+
 // Configuration and Settings
-COLORREF ReadyColor[3], ReactColor[3], EarlyColor[3], ResultColor[3], EarlyFontColor[3], ResultsFontColor[3];
-int MinDelay, MaxDelay, NumberOfTrials, EarlyResetDelay, VirtualDebounce, RawKeyboardEnable, RawMouseEnable, RawInputDebug, LogEnable;
-wchar_t logFileName[MAX_PATH]; // Log file name global for ease
-wchar_t fontName[MAX_PATH];
-wchar_t fontStyle[MAX_PATH];
-int fontSize;
+COLORREF ready_color[3], react_color[3], early_color[3], result_color[3], early_font_color[3], results_font_color[3];
+int min_delay, max_delay, number_of_trials, early_reset_delay, virtual_debounce, raw_keyboard_enabled, raw_mouse_enabled, raw_input_debug, log_enabled;
+wchar_t log_file_name[MAX_PATH]; // Log file name global for ease
+wchar_t font_name[MAX_PATH];
+wchar_t font_style[MAX_PATH];
+int font_size;
+int resolution_width;
+int resolution_height;
 
 // Program State and Data
 typedef enum { // Define states
@@ -37,18 +42,18 @@ typedef enum { // Define states
     STATE_EARLY,
     STATE_RESULT
 } ProgramState;
-ProgramState currentState = STATE_READY; // Initial state
-double* reactionTimes = NULL; // Array to store the last 5 reaction times.
-int currentAttempt = 0;
-int TotalTrialNumber = 0;
-int keyStates[MAX_KEYS] = { 0 }; // 0: not pressed, 1: pressed
-LARGE_INTEGER startTime, endTime, freq; // For high-resolution timing
+ProgramState Current_State = STATE_READY; // Initial state
+double* reaction_times = NULL; // Array to store the last 5 reaction times.
+int current_attempt = 0;
+int total_trial_number = 0;
+int key_states[MAX_KEYS] = { 0 }; // 0: not pressed, 1: pressed
+LARGE_INTEGER start_time, end_time, frequency; // For high-resolution timing
 typedef struct { // Struct for determining whether an input is allowable
     bool Mouse;
     bool Keyboard;
 } InputState;
-InputState InputAllowed = { true, true }; // Input allowed or not
-bool DebounceActive = false; // This is a global indicator for whether or not program is halting inputs for Virtual Debounce feature
+InputState Input_Enabled = { true, true }; // Input allowed or not
+bool debounce_active = false; // This is a global indicator for whether or not program is halting inputs for Virtual Debounce feature
 
 // UI and Rendering
 HBRUSH hReadyBrush, hReactBrush, hEarlyBrush, hResultBrush; // Brushes for painting the window
@@ -61,6 +66,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 void HandleError(const wchar_t* errorMessage);
 void ValidateColors(COLORREF color[]);
 void ValidateDelays();
+void ValidateResolution();
 void RemoveComment(wchar_t* str);
 int GenerateRandomDelay(int min, int max);
 void BrushCleanup();
@@ -94,7 +100,7 @@ void ResetAll(HWND hwnd);
 
 
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
-    QueryPerformanceFrequency(&freq);
+    QueryPerformanceFrequency(&frequency);
 
     const wchar_t CLASS_NAME[] = L"Sample Window Class";
 
@@ -113,17 +119,17 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     // Initialize brushes for painting.
     LoadConfig(); // Load configuration at the start
 
-    if (LogEnable==1) InitializeLogFileName();
+    if (log_enabled==1) InitializeLogFileName();
 
     // Get the dimensions of the main display
-    int screenWidth = GetSystemMetrics(SM_CXSCREEN);
-    int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+    int screen_width = GetSystemMetrics(SM_CXSCREEN);
+    int screen_height = GetSystemMetrics(SM_CYSCREEN);
 
     // Calculate the position to center the window
-    int windowWidth = 1280; // Your window width
-    int windowHeight = 720; // Your window height
-    int posX = (screenWidth - windowWidth) / 2;
-    int posY = (screenHeight - windowHeight) / 2;
+    int window_width = resolution_width; // Your window width
+    int window_height = resolution_height; // Your window height
+    int position_x = (screen_width - window_width) / 2;
+    int position_y = (screen_height - window_height) / 2;
 
     // Create the main window centered on the main display
     HWND hwnd = CreateWindowEx(
@@ -131,7 +137,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
         CLASS_NAME,
         L"reaction-time-tester",
         WS_OVERLAPPEDWINDOW,
-        posX, posY, windowWidth, windowHeight,
+        position_x, position_y, window_width, window_height,
         NULL,
         NULL,
         hInstance,
@@ -139,15 +145,15 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     );
 
     // Raw input
-    bool keyboardRegistered = false;
-    bool mouseRegistered = false;
+    bool keyboard_registered = false;
+    bool mouse_registered = false;
 
-    if (RawKeyboardEnable == 1) keyboardRegistered = RegisterForRawInput(hwnd, 0x06); // Attempt to Register Keyboard
-    if (RawMouseEnable == 1) mouseRegistered = RegisterForRawInput(hwnd, 0x02); // Attempt to Register Mouse
+    if (raw_keyboard_enabled == 1) keyboard_registered = RegisterForRawInput(hwnd, 0x06); // Attempt to Register Keyboard
+    if (raw_mouse_enabled == 1) mouse_registered = RegisterForRawInput(hwnd, 0x02); // Attempt to Register Mouse
 
-    if (RawInputDebug == 1) {
+    if (raw_input_debug == 1) {
         wchar_t message[256];
-        swprintf(message, sizeof(message) / sizeof(wchar_t), L"RawKeyboardEnable: %d\nRawMouseEnable: %d\nRegisterForRawKeyboardInput: %s\nRegisterForRawMouseInput: %s", RawKeyboardEnable, RawMouseEnable, keyboardRegistered ? L"True" : L"False", mouseRegistered ? L"True" : L"False");
+        swprintf(message, sizeof(message) / sizeof(wchar_t), L"RawKeyboardEnable: %d\nRawMouseEnable: %d\nRegisterForRawKeyboardInput: %s\nRegisterForRawMouseInput: %s", raw_keyboard_enabled, raw_mouse_enabled, keyboard_registered ? L"True" : L"False", mouse_registered ? L"True" : L"False");
         MessageBox(NULL, message, L"Raw Input Variables", MB_OK);
     }
 
@@ -162,28 +168,28 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     }
 
     // Switch to ready state
-    currentState = STATE_READY;
+    Current_State = STATE_READY;
 
     // Seed the random number generator.
     srand((unsigned)time(NULL));
 
     // Schedule the transition to react after a random delay.
-    SetTimer(hwnd, TIMER_READY, GenerateRandomDelay(MinDelay, MaxDelay), NULL);
+    SetTimer(hwnd, TIMER_READY, GenerateRandomDelay(min_delay, max_delay), NULL);
 
-    int fontWeight = FW_REGULAR;
-    BOOL isItalic = FALSE;
+    int font_weight = FW_REGULAR;
+    BOOL italics_enabled = FALSE;
 
-    if (wcscmp(fontStyle, L"Bold") == 0) {
-        fontWeight = FW_BOLD;
+    if (wcscmp(font_style, L"Bold") == 0) {
+        font_weight = FW_BOLD;
     }
-    else if (wcscmp(fontStyle, L"Italic") == 0) {
-        isItalic = TRUE;
+    else if (wcscmp(font_style, L"Italic") == 0) {
+        italics_enabled = TRUE;
     }
 
     // Prepare font using the loaded configurations
-    hFont = CreateFont(fontSize, 0, 0, 0, fontWeight, isItalic, FALSE, FALSE, ANSI_CHARSET,
+    hFont = CreateFont(font_size, 0, 0, 0, font_weight, italics_enabled, FALSE, FALSE, ANSI_CHARSET,
         OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
-        DEFAULT_PITCH | FF_DONTCARE, fontName);
+        DEFAULT_PITCH | FF_DONTCARE, font_name);
 
     if (!hFont) {
         HandleError(L"Failed to create font.");
@@ -199,7 +205,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     // Cleanup.
     BrushCleanup();
 
-    free(reactionTimes);
+    free(reaction_times);
 
     return 0;
 }
@@ -223,31 +229,31 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     case WM_SETCURSOR:
         switch (LOWORD(lParam)) {
         case HTCLIENT: // In this section we use InputAllowed to change state of whether or not mouse can input commands
-            if (!DebounceActive) { InputAllowed.Mouse = true; }
+            if (!debounce_active) { Input_Enabled.Mouse = true; }
             SetCursor(LoadCursor(NULL, IDC_HAND)); // Set the cursor to a hand cursor
             break;
         case HTLEFT:
         case HTRIGHT:
-            InputAllowed.Mouse = false;
+            Input_Enabled.Mouse = false;
             SetCursor(LoadCursor(NULL, IDC_SIZEWE)); // Left or right border (resize cursor)
             break;
         case HTTOP:
         case HTBOTTOM:
-            InputAllowed.Mouse = false;
+            Input_Enabled.Mouse = false;
             SetCursor(LoadCursor(NULL, IDC_SIZENS)); // Top or bottom border (resize cursor)
             break;
         case HTTOPLEFT:
         case HTBOTTOMRIGHT:
-            InputAllowed.Mouse = false;
+            Input_Enabled.Mouse = false;
             SetCursor(LoadCursor(NULL, IDC_SIZENWSE)); // Top-left or bottom-right corner (diagonal resize cursor)
             break;
         case HTTOPRIGHT:
         case HTBOTTOMLEFT:
-            InputAllowed.Mouse = false;
+            Input_Enabled.Mouse = false;
             SetCursor(LoadCursor(NULL, IDC_SIZENESW)); // Top-right or bottom-left corner (diagonal resize cursor)
             break;
         default:
-            InputAllowed.Mouse = false;
+            Input_Enabled.Mouse = false;
             SetCursor(LoadCursor(NULL, IDC_ARROW)); // Use the default cursor
             break;
         }
@@ -260,7 +266,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
         // Decide which brush to use based on the current state.
         HBRUSH hBrush;
-        switch (currentState) {
+        switch (Current_State) {
         case STATE_REACT:
             hBrush = hReactBrush;
             break;
@@ -296,35 +302,35 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
         wchar_t buf[100] = { 0 }; // Initialize buffer
 
-        if (currentState == STATE_RESULT) {
-            SetTextColor(hdc, RGB(ResultsFontColor[0], ResultsFontColor[1], ResultsFontColor[2]));
-            TotalTrialNumber++;
+        if (Current_State == STATE_RESULT) {
+            SetTextColor(hdc, RGB(results_font_color[0], results_font_color[1], results_font_color[2]));
+            total_trial_number++;
 
-            if (currentAttempt < NumberOfTrials) {
-                swprintf_s(buf, 100, L"Last: %.2lfms\nComplete %d trials for average.\nTrials so far: %d", reactionTimes[(currentAttempt - 1 + NumberOfTrials) % NumberOfTrials], NumberOfTrials, TotalTrialNumber);
+            if (current_attempt < number_of_trials) {
+                swprintf_s(buf, 100, L"Last: %.2lfms\nComplete %d trials for average.\nTrials so far: %d", reaction_times[(current_attempt - 1 + number_of_trials) % number_of_trials], number_of_trials, total_trial_number);
             }
             else {
                 double total = 0;
-                for (int i = 0; i < NumberOfTrials; i++) {
-                    total += reactionTimes[i];
+                for (int i = 0; i < number_of_trials; i++) {
+                    total += reaction_times[i];
                 }
-                double average = total / NumberOfTrials;
-                swprintf_s(buf, 100, L"Last: %.2lfms\nAverage (last %d): %.2lfms\nTrials so far: %d", reactionTimes[(currentAttempt - 1) % NumberOfTrials], NumberOfTrials, average, TotalTrialNumber);
+                double average = total / number_of_trials;
+                swprintf_s(buf, 100, L"Last: %.2lfms\nAverage (last %d): %.2lfms\nTrials so far: %d", reaction_times[(current_attempt - 1) % number_of_trials], number_of_trials, average, total_trial_number);
             }
-            if (LogEnable==1) AppendToLog(reactionTimes[(currentAttempt - 1 + NumberOfTrials) % NumberOfTrials], TotalTrialNumber);
+            if (log_enabled==1) AppendToLog(reaction_times[(current_attempt - 1 + number_of_trials) % number_of_trials], total_trial_number);
         }
-        else if (currentState == STATE_EARLY) {
-            SetTextColor(hdc, RGB(EarlyFontColor[0], EarlyFontColor[1], EarlyFontColor[2]));
-            swprintf_s(buf, 100, L"Too early!\nTrials so far: %d", TotalTrialNumber);
+        else if (Current_State == STATE_EARLY) {
+            SetTextColor(hdc, RGB(early_font_color[0], early_font_color[1], early_font_color[2]));
+            swprintf_s(buf, 100, L"Too early!\nTrials so far: %d", total_trial_number);
         }
 
         // Calculate rectangle for the text and display it.
-        RECT textRect;
-        SetRectEmpty(&textRect);
-        DrawText(hdc, buf, -1, &textRect, DT_CALCRECT | DT_WORDBREAK);
-        RECT centeredRect = rect;
-        centeredRect.top += (rect.bottom - rect.top - (textRect.bottom - textRect.top)) / 2; // Text doesn't center vertically (Possibly due to newline not being accounted for?)
-        DrawText(hdc, buf, -1, &centeredRect, DT_CENTER | DT_WORDBREAK);
+        RECT text_rectangle;
+        SetRectEmpty(&text_rectangle);
+        DrawText(hdc, buf, -1, &text_rectangle, DT_CALCRECT | DT_WORDBREAK);
+        RECT centered_rectangle = rect;
+        centered_rectangle.top += (rect.bottom - rect.top - (text_rectangle.bottom - text_rectangle.top)) / 2; // Text doesn't center vertically (Possibly due to newline not being accounted for?)
+        DrawText(hdc, buf, -1, &centered_rectangle, DT_CENTER | DT_WORDBREAK);
 
         EndPaint(hwnd, &ps);
     } break;
@@ -333,15 +339,15 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     case WM_TIMER:
         switch (wParam) {
         case TIMER_READY:
-            currentState = STATE_READY;
+            Current_State = STATE_READY;
             KillTimer(hwnd, TIMER_READY);
-            SetTimer(hwnd, TIMER_REACT, GenerateRandomDelay(MinDelay, MaxDelay), NULL);
+            SetTimer(hwnd, TIMER_REACT, GenerateRandomDelay(min_delay, max_delay), NULL);
             break;
 
         case TIMER_REACT:
-            if (currentState == STATE_READY) {
-                currentState = STATE_REACT;
-                QueryPerformanceCounter(&startTime); // Start the timer for reaction time.
+            if (Current_State == STATE_READY) {
+                Current_State = STATE_REACT;
+                QueryPerformanceCounter(&start_time); // Start the timer for reaction time.
                 InvalidateRect(hwnd, NULL, TRUE); // Force repaint.
             }
             break;
@@ -351,9 +357,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             break;
 
         case TIMER_DEBOUNCE:  // Debounce implementation is okay at this point, I 
-            InputAllowed.Mouse = true;
-            InputAllowed.Keyboard = true;
-            DebounceActive = false;
+            Input_Enabled.Mouse = true;
+            Input_Enabled.Keyboard = true;
+            debounce_active = false;
             break;
 
         }
@@ -377,10 +383,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
         RAWINPUT* raw = (RAWINPUT*)lpb;
 
-        if (raw->header.dwType == RIM_TYPEKEYBOARD && RawKeyboardEnable == 1) { // Handle raw keyboard inputs
+        if (raw->header.dwType == RIM_TYPEKEYBOARD && raw_keyboard_enabled == 1) { // Handle raw keyboard inputs
             HandleRawKeyboardInput(raw, hwnd);
         }
-        else if (raw->header.dwType == RIM_TYPEMOUSE && RawMouseEnable == 1) { // Handle raw mouse inputs
+        else if (raw->header.dwType == RIM_TYPEMOUSE && raw_mouse_enabled == 1) { // Handle raw mouse inputs
             HandleRawMouseInput(raw, hwnd);
         }
 
@@ -391,7 +397,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     // Handle generic keyboard input:
     case WM_KEYDOWN:
     case WM_KEYUP:
-        if (RawKeyboardEnable == 0) {
+        if (raw_keyboard_enabled == 0) {
             HandleGenericKeyboardInput(hwnd);
         }
         break;
@@ -399,7 +405,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     // Handle generic mouse input:
     case WM_LBUTTONDOWN:
     case WM_LBUTTONUP:
-        if (RawMouseEnable == 0) {
+        if (raw_mouse_enabled == 0) {
             HandleGenericMouseInput(hwnd);
         }
         break;
@@ -431,16 +437,22 @@ void ValidateColors(COLORREF color[]) {
     }
 }
 
-void ValidateDelays() { // Check for validity of delay. Very single purpose, may want to rewrite for modularity/flexibility
-    if (MinDelay <= 0 || MaxDelay <= 0 || MaxDelay < MinDelay || VirtualDebounce < 0 || EarlyResetDelay <= 0) {
+void ValidateDelays() { // Check for validity of delay. Very single purpose, may want to rewrite for modularity/flexibility, maybe just check all of config settings
+    if (min_delay <= 0 || max_delay <= 0 || max_delay < min_delay || virtual_debounce < 0 || early_reset_delay <= 0) {
         HandleError(L"Invalid delay values in the configuration!");
     }
 }
 
+void ValidateResolution() { // Check for resolution size. Similar issue to other "validate" functions in that it is very single use. 
+    if (resolution_width <= 0 || resolution_height <= 0) {
+        HandleError(L"Invalid resolution values in the configuration!");
+    }
+}
+
 void RemoveComment(wchar_t* str) { // Removes comments and trailing spaces from strings read from .cfg files
-    wchar_t* semicolonPos = wcschr(str, L';'); // Locate the first occurrence of a semicolon, which denotes the start of a comment.
-    if (semicolonPos) {
-        *semicolonPos = L'\0';  // Terminate the string at the start of the comment.
+    wchar_t* semicolon_position = wcschr(str, L';'); // Locate the first occurrence of a semicolon, which denotes the start of a comment.
+    if (semicolon_position) {
+        *semicolon_position = L'\0';  // Terminate the string at the start of the comment.
     }
 
     size_t len = wcslen(str);
@@ -465,49 +477,49 @@ void BrushCleanup() { // Hardcoded to delete only these brushes, should probably
 
 // Configuration and setup functions
 bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength) { // Initializes paths and possibly copies default.cfg to reaction.cfg
-    wchar_t exePath[MAX_PATH];
-    wchar_t defaultCfgPath[MAX_PATH];
+    wchar_t exe_path[MAX_PATH];
+    wchar_t default_cfg_path[MAX_PATH];
 
-    if (!GetModuleFileName(NULL, exePath, MAX_PATH)) {  // Failed to get current module's file path.
+    if (!GetModuleFileName(NULL, exe_path, MAX_PATH)) {  // Failed to get current module's file path.
         HandleError(L"Failed to get module file name");
         return false;
     }
 
-    wchar_t* lastSlash = wcsrchr(exePath, '\\');  // Find the last directory separator.
-    if (lastSlash) *(lastSlash + 1) = L'\0';  // Null-terminate to get directory path.
+    wchar_t* last_slash = wcsrchr(exe_path, '\\');  // Find the last directory separator.
+    if (last_slash) *(last_slash + 1) = L'\0';  // Null-terminate to get directory path.
 
-    if (swprintf_s(cfgPath, maxLength, L"%s%s", exePath, L"reaction.cfg") < 0 ||
-        swprintf_s(defaultCfgPath, MAX_PATH, L"%s%s", exePath, L"default.cfg") < 0) {  // Format paths for config files.
+    if (swprintf_s(cfgPath, maxLength, L"%s%s", exe_path, L"reaction.cfg") < 0 ||
+        swprintf_s(default_cfg_path, MAX_PATH, L"%s%s", exe_path, L"default.cfg") < 0) {  // Format paths for config files.
         HandleError(L"Failed to create config paths");
         return false;
     }
 
     if (GetFileAttributes(cfgPath) == INVALID_FILE_ATTRIBUTES) {  // If reaction.cfg doesn't exist, copy from default.cfg.
-        FILE* defaultFile;
-        errno_t err1 = _wfopen_s(&defaultFile, defaultCfgPath, L"rb");
-        if (err1 != 0 || !defaultFile) {
+        FILE* default_file;
+        errno_t err1 = _wfopen_s(&default_file, default_cfg_path, L"rb");
+        if (err1 != 0 || !default_file) {
             HandleError(L"Failed to open default.cfg");
             return false;
         }
 
-        FILE* newFile;
-        errno_t err2 = _wfopen_s(&newFile, cfgPath, L"wb");
-        if (err2 != 0 || !newFile) {
-            fclose(defaultFile);
+        FILE* new_file;
+        errno_t err2 = _wfopen_s(&new_file, cfgPath, L"wb");
+        if (err2 != 0 || !new_file) {
+            fclose(default_file);
             HandleError(L"Failed to create reaction.cfg");
             return false;
         }
 
         char buffer[1024];
-        size_t bytesRead;
-        while ((bytesRead = fread(buffer, 1, sizeof(buffer), defaultFile)) > 0) {  // Copy contents from default.cfg to reaction.cfg in chunks.
-            if (fwrite(buffer, 1, bytesRead, newFile) < bytesRead) { // Has write operation written the correct number of bytes?
-                fclose(newFile); fclose(defaultFile);
+        size_t bytes_read;
+        while ((bytes_read = fread(buffer, 1, sizeof(buffer), default_file)) > 0) {  // Copy contents from default.cfg to reaction.cfg in chunks.
+            if (fwrite(buffer, 1, bytes_read, new_file) < bytes_read) { // Has write operation written the correct number of bytes?
+                fclose(new_file); fclose(default_file);
                 HandleError(L"Failed to write to reaction.cfg");
                 return false;
             }
         }
-        fclose(newFile); fclose(defaultFile);
+        fclose(new_file); fclose(default_file);
     }
     return true;
 }
@@ -537,62 +549,65 @@ void LoadFontConfiguration(const wchar_t* cfgPath, wchar_t* targetFontName, size
     RemoveComment(fontStyle);  // Cleanup any comments from the retrieved font style.
 }
 
-
 void LoadTrialConfiguration(const wchar_t* cfgPath) {
-    NumberOfTrials = GetPrivateProfileInt(L"Trial", L"NumberOfTrials", DEFAULT_NUM_TRIALS, cfgPath);
-    if (NumberOfTrials <= 0) {
+    number_of_trials = GetPrivateProfileInt(L"Trial", L"NumberOfTrials", DEFAULT_NUM_TRIALS, cfgPath);
+    if (number_of_trials <= 0) {
         HandleError(L"Invalid number of trials in the configuration!");
     }
 }
 
 void LoadTextColorConfiguration(const wchar_t* cfgPath) {
     wchar_t buffer[MAX_PATH] = L"";
-    LoadColorConfiguration(cfgPath, L"Fonts", L"EarlyFontColor", EarlyFontColor);
-    LoadColorConfiguration(cfgPath, L"Fonts", L"ResultsFontColor", ResultsFontColor);
+    LoadColorConfiguration(cfgPath, L"Fonts", L"EarlyFontColor", early_font_color);
+    LoadColorConfiguration(cfgPath, L"Fonts", L"ResultsFontColor", results_font_color);
 }
 
 void AllocateMemoryForReactionTimes() {
-    size_t totalSize = sizeof(double) * NumberOfTrials;
-    reactionTimes = (double*)malloc(totalSize);
-    if (reactionTimes == NULL) {
+    size_t total_size = sizeof(double) * number_of_trials;
+    reaction_times = (double*)malloc(total_size);
+    if (reaction_times == NULL) {
         HandleError(L"Failed to allocate memory for reaction times!");
         return; // Return to prevent further execution
     }
-    memset(reactionTimes, 0, totalSize);
+    memset(reaction_times, 0, total_size);
 }
 
 void LoadConfig() {
-    wchar_t cfgPath[MAX_PATH];
+    wchar_t cfg_path[MAX_PATH];
 
-    if (!InitializeConfigFileAndPath(cfgPath, MAX_PATH)) {
+    if (!InitializeConfigFileAndPath(cfg_path, MAX_PATH)) {
         exit(1); // Exiting as the path acquisition failed
     }
 
-    LoadColorConfiguration(cfgPath, L"Colors", L"ReadyColor", ReadyColor);
-    LoadColorConfiguration(cfgPath, L"Colors", L"ReactColor", ReactColor);
-    LoadColorConfiguration(cfgPath, L"Colors", L"EarlyColor", EarlyColor);
-    LoadColorConfiguration(cfgPath, L"Colors", L"ResultColor", ResultColor);
+    resolution_width = GetPrivateProfileInt(L"Resolution", L"ResolutionWidth", DEFAULT_RESOLUTION_WIDTH, cfg_path);
+    resolution_height = GetPrivateProfileInt(L"Resolution", L"ResolutionHeight", DEFAULT_RESOLUTION_HEIGHT, cfg_path);
+    ValidateResolution();
 
-    hReadyBrush = CreateSolidBrush(RGB(ReadyColor[0], ReadyColor[1], ReadyColor[2]));
-    hReactBrush = CreateSolidBrush(RGB(ReactColor[0], ReactColor[1], ReactColor[2]));
-    hEarlyBrush = CreateSolidBrush(RGB(EarlyColor[0], EarlyColor[1], EarlyColor[2]));
-    hResultBrush = CreateSolidBrush(RGB(ResultColor[0], ResultColor[1], ResultColor[2]));
+    LoadColorConfiguration(cfg_path, L"Colors", L"ReadyColor", ready_color);
+    LoadColorConfiguration(cfg_path, L"Colors", L"ReactColor", react_color);
+    LoadColorConfiguration(cfg_path, L"Colors", L"EarlyColor", early_color);
+    LoadColorConfiguration(cfg_path, L"Colors", L"ResultColor", result_color);
 
-    MinDelay = GetPrivateProfileInt(L"Delays", L"MinDelay", DEFAULT_MIN_DELAY, cfgPath);
-    MaxDelay = GetPrivateProfileInt(L"Delays", L"MaxDelay", DEFAULT_MAX_DELAY, cfgPath);
-    EarlyResetDelay = GetPrivateProfileInt(L"Delays", L"EarlyResetDelay", DEFAULT_EARLY_RESET_DELAY, cfgPath);
-    VirtualDebounce = GetPrivateProfileInt(L"Delays", L"VirtualDebounce", DEFAULT_VIRTUAL_DEBOUNCE, cfgPath);
+    hReadyBrush = CreateSolidBrush(RGB(ready_color[0], ready_color[1], ready_color[2]));
+    hReactBrush = CreateSolidBrush(RGB(react_color[0], react_color[1], react_color[2]));
+    hEarlyBrush = CreateSolidBrush(RGB(early_color[0], early_color[1], early_color[2]));
+    hResultBrush = CreateSolidBrush(RGB(result_color[0], result_color[1], result_color[2]));
+
+    min_delay = GetPrivateProfileInt(L"Delays", L"MinDelay", DEFAULT_MIN_DELAY, cfg_path);
+    max_delay = GetPrivateProfileInt(L"Delays", L"MaxDelay", DEFAULT_MAX_DELAY, cfg_path);
+    early_reset_delay = GetPrivateProfileInt(L"Delays", L"EarlyResetDelay", DEFAULT_EARLY_RESET_DELAY, cfg_path);
+    virtual_debounce = GetPrivateProfileInt(L"Delays", L"VirtualDebounce", DEFAULT_VIRTUAL_DEBOUNCE, cfg_path);
     ValidateDelays();
 
-    RawKeyboardEnable = GetPrivateProfileInt(L"Toggles", L"RawKeyboardEnable", DEFAULT_RAWKEYBOARDENABLE, cfgPath);
-    RawMouseEnable = GetPrivateProfileInt(L"Toggles", L"RawMouseEnable", DEFAULT_RAWMOUSEENABLE, cfgPath);
-    RawInputDebug = GetPrivateProfileInt(L"Toggles", L"RawInputDebug", 0, cfgPath); // Debug => No macro wanted
+    raw_keyboard_enabled = GetPrivateProfileInt(L"Toggles", L"RawKeyboardEnable", DEFAULT_RAWKEYBOARDENABLE, cfg_path);
+    raw_mouse_enabled = GetPrivateProfileInt(L"Toggles", L"RawMouseEnable", DEFAULT_RAWMOUSEENABLE, cfg_path);
+    raw_input_debug = GetPrivateProfileInt(L"Toggles", L"RawInputDebug", 0, cfg_path); // Debug => No macro wanted
 
-    LogEnable = GetPrivateProfileInt(L"Toggles", L"LogEnable", 0, cfgPath);
+    log_enabled = GetPrivateProfileInt(L"Toggles", L"LogEnable", 0, cfg_path);
 
-    LoadTrialConfiguration(cfgPath);
-    LoadTextColorConfiguration(cfgPath);
-    LoadFontConfiguration(cfgPath, fontName, MAX_PATH, &fontSize, fontStyle, MAX_PATH);
+    LoadTrialConfiguration(cfg_path);
+    LoadTextColorConfiguration(cfg_path);
+    LoadFontConfiguration(cfg_path, font_name, MAX_PATH, &font_size, font_style, MAX_PATH);
 
     AllocateMemoryForReactionTimes();
 }
@@ -602,53 +617,53 @@ void InitializeLogFileName() {
     struct tm* tmp;
 
     time(&t);
-    struct tm localTime;
-    localtime_s(&localTime, &t);
-    tmp = &localTime;
+    struct tm local_time;
+    localtime_s(&local_time, &t);
+    tmp = &local_time;
 
     wchar_t timestamp[TIME_BUFFER_SIZE];
     wcsftime(timestamp, TIME_BUFFER_SIZE, L"%Y%m%d%H%M%S", tmp);  // Format YYYYMMDDHHMMSS
 
-    swprintf_s(logFileName, MAX_PATH, L"log\\Log_%s.log", timestamp);
+    swprintf_s(log_file_name, MAX_PATH, L"log\\Log_%s.log", timestamp);
 }
 
 bool AppendToLog(double x, int y) {  // Handles log file operations
-    wchar_t exePath[MAX_PATH];
-    wchar_t logFilePath[MAX_PATH];
-    wchar_t logDirPath[MAX_PATH];  // Added for the directory path
+    wchar_t exe_path[MAX_PATH];
+    wchar_t log_file_path[MAX_PATH];
+    wchar_t log_dir_path[MAX_PATH];  // Added for the directory path
 
     // Get the directory where the executable is running
-    if (!GetModuleFileName(NULL, exePath, MAX_PATH)) {
+    if (!GetModuleFileName(NULL, exe_path, MAX_PATH)) {
         HandleError(L"Failed to get module file name");
     }
     else {
-        wchar_t* lastSlash = wcsrchr(exePath, '\\');
-        if (lastSlash) {
-            *(lastSlash + 1) = L'\0';
+        wchar_t* last_slash = wcsrchr(exe_path, '\\');
+        if (last_slash) {
+            *(last_slash + 1) = L'\0';
         }
 
         // Create full path for the log directory
-        swprintf_s(logDirPath, MAX_PATH, L"%slog", exePath);
+        swprintf_s(log_dir_path, MAX_PATH, L"%slog", exe_path);
 
         // Ensure log directory exists
-        if (!CreateDirectory(logDirPath, NULL) && GetLastError() != ERROR_ALREADY_EXISTS) {
+        if (!CreateDirectory(log_dir_path, NULL) && GetLastError() != ERROR_ALREADY_EXISTS) {
             HandleError(L"Failed to create log directory");
         }
         else {
             // Create full path for the log file
-            swprintf_s(logFilePath, MAX_PATH, L"%s%s", exePath, logFileName);
+            swprintf_s(log_file_path, MAX_PATH, L"%s%s", exe_path, log_file_name);
 
             // Append to the log file
-            FILE* logFile;
-            errno_t err = _wfopen_s(&logFile, logFilePath, L"a");
-            if (err != 0 || !logFile) {
-                wchar_t errorMessage[512];
-                _wcserror_s(errorMessage, sizeof(errorMessage) / sizeof(wchar_t), err);
-                HandleError(errorMessage);
+            FILE* log_file;
+            errno_t err = _wfopen_s(&log_file, log_file_path, L"a");
+            if (err != 0 || !log_file) {
+                wchar_t error_message[512];
+                _wcserror_s(error_message, sizeof(error_message) / sizeof(wchar_t), err);
+                HandleError(error_message);
             }
             else {
-                fwprintf(logFile, L"Trial %d: %f\n", y, x);
-                fclose(logFile);
+                fwprintf(log_file, L"Trial %d: %f\n", y, x);
+                fclose(log_file);
                 return true;
             }
         }
@@ -672,17 +687,17 @@ bool RegisterForRawInput(HWND hwnd, USHORT usage) {
 }
 
 void HandleInput(HWND hwnd, bool x) {   // Primary "game" logic is done here. x variable to indicate the type of input device
-    if ((!InputAllowed.Mouse && x) || (!InputAllowed.Keyboard && !x)) {
+    if ((!Input_Enabled.Mouse && x) || (!Input_Enabled.Keyboard && !x)) {
         return;  // Don't process the input if device is currently blocked
     }
-    if (currentState == STATE_REACT) {
+    if (Current_State == STATE_REACT) {
         HandleReactClick(hwnd);
     }
-    else if ((currentState == STATE_EARLY) || (currentState == STATE_RESULT)) {
-        if ((currentState == STATE_RESULT) && currentAttempt == NumberOfTrials) {
-            currentAttempt = 0;
-            for (int i = 0; i < NumberOfTrials; i++) {
-                reactionTimes[i] = 0;
+    else if ((Current_State == STATE_EARLY) || (Current_State == STATE_RESULT)) {
+        if ((Current_State == STATE_RESULT) && current_attempt == number_of_trials) {
+            current_attempt = 0;
+            for (int i = 0; i < number_of_trials; i++) {
+                reaction_times[i] = 0;
             }
         }
         ResetLogic(hwnd);
@@ -690,11 +705,11 @@ void HandleInput(HWND hwnd, bool x) {   // Primary "game" logic is done here. x 
     else {
         HandleEarlyClick(hwnd);
     }
-    if ((VirtualDebounce > 0) && (InputAllowed.Mouse || InputAllowed.Keyboard)) { // Block inputs if debounce is enabled and either input devices is active
-        InputAllowed.Mouse = false;
-        InputAllowed.Keyboard = false;
-        DebounceActive = true;
-        SetTimer(hwnd, TIMER_DEBOUNCE, VirtualDebounce, NULL);
+    if ((virtual_debounce > 0) && (Input_Enabled.Mouse || Input_Enabled.Keyboard)) { // Block inputs if debounce is enabled and either input devices is active
+        Input_Enabled.Mouse = false;
+        Input_Enabled.Keyboard = false;
+        debounce_active = true;
+        SetTimer(hwnd, TIMER_DEBOUNCE, virtual_debounce, NULL);
     }
 }
 
@@ -707,37 +722,37 @@ void HandleGenericKeyboardInput(HWND hwnd) {
 void HandleRawKeyboardInput(RAWINPUT* raw, HWND hwnd) {
     int vkey = raw->data.keyboard.VKey;
 
-    if (raw->data.keyboard.Flags == RI_KEY_MAKE && IsAlphanumeric(vkey) && !keyStates[vkey]) {
+    if (raw->data.keyboard.Flags == RI_KEY_MAKE && IsAlphanumeric(vkey) && !key_states[vkey]) {
         HandleInput(hwnd, 0);
-        keyStates[vkey] = 1; // Latch the key state
+        key_states[vkey] = 1; // Latch the key state
     }
     else if (raw->data.keyboard.Flags == RI_KEY_BREAK) {
-        keyStates[vkey] = 0; // Unlatch on key release
+        key_states[vkey] = 0; // Unlatch on key release
     }
 }
 
 void HandleGenericMouseInput(HWND hwnd) {
-    static int wasButtonPressed = 0; // 0: not pressed, 1: pressed
-    int isButtonPressed = GetAsyncKeyState(VK_LBUTTON) & 0x8000;
+    static int was_button_pressed = 0; // 0: not pressed, 1: pressed
+    int is_button_pressed = GetAsyncKeyState(VK_LBUTTON) & 0x8000;
 
-    if (isButtonPressed && !wasButtonPressed) { // Check for transition from up to down
+    if (is_button_pressed && !was_button_pressed) { // Check for transition from up to down
         HandleInput(hwnd, 1);
-        wasButtonPressed = 1; // Latch the button state
+        was_button_pressed = 1; // Latch the button state
     }
-    else if (!isButtonPressed && wasButtonPressed) { // Check for transition from down to up
-        wasButtonPressed = 0; // Unlatch immediately on button release
+    else if (!is_button_pressed && was_button_pressed) { // Check for transition from down to up
+        was_button_pressed = 0; // Unlatch immediately on button release
     }
 }
 
 void HandleRawMouseInput(RAWINPUT* raw, HWND hwnd) {
-    static int wasButtonPressed = 0; // 0: not pressed, 1: pressed
+    static int was_button_pressed = 0; // 0: not pressed, 1: pressed
 
-    if (raw->data.mouse.usButtonFlags & RI_MOUSE_LEFT_BUTTON_DOWN && !wasButtonPressed) {
+    if (raw->data.mouse.usButtonFlags & RI_MOUSE_LEFT_BUTTON_DOWN && !was_button_pressed) {
         HandleInput(hwnd, 1);
-        wasButtonPressed = 1; // Latch the button state
+        was_button_pressed = 1; // Latch the button state
     }
-    else if (raw->data.mouse.usButtonFlags & RI_MOUSE_LEFT_BUTTON_UP && wasButtonPressed) {
-        wasButtonPressed = 0; // Unlatch immediately on button release
+    else if (raw->data.mouse.usButtonFlags & RI_MOUSE_LEFT_BUTTON_UP && was_button_pressed) {
+        was_button_pressed = 0; // Unlatch immediately on button release
     }
 }
 
@@ -748,13 +763,13 @@ bool IsAlphanumeric(int vkey) {
 
 void UpdateKeyState(int vk, HWND hwnd) {
     if (IsAlphanumeric(vk)) {
-        bool isKeyPressed = GetAsyncKeyState(vk) & 0x8000;
-        if (isKeyPressed && !keyStates[vk]) {
+        bool is_key_pressed = GetAsyncKeyState(vk) & 0x8000;
+        if (is_key_pressed && !key_states[vk]) {
             HandleInput(hwnd, 0);
-            keyStates[vk] = 1; // Latch the key state
+            key_states[vk] = 1; // Latch the key state
         }
-        else if (!isKeyPressed && keyStates[vk]) {
-            keyStates[vk] = 0; // Unlatch on key release
+        else if (!is_key_pressed && key_states[vk]) {
+            key_states[vk] = 0; // Unlatch on key release
         }
     }
 }
@@ -768,36 +783,36 @@ void ResetLogic(HWND hwnd) {
     KillTimer(hwnd, TIMER_EARLY);
     KillTimer(hwnd, TIMER_DEBOUNCE); // Not clear if this is needed right now
 
-    currentState = STATE_READY;
+    Current_State = STATE_READY;
    
     // Schedule the transition to green after a random delay.
-    SetTimer(hwnd, TIMER_READY, GenerateRandomDelay(MinDelay,MaxDelay), NULL);
+    SetTimer(hwnd, TIMER_READY, GenerateRandomDelay(min_delay,max_delay), NULL);
 
     // Force repaint.
     InvalidateRect(hwnd, NULL, TRUE);
 }
 
 void HandleReactClick(HWND hwnd) {
-    QueryPerformanceCounter(&endTime);
-    double timeTaken = ((double)(endTime.QuadPart - startTime.QuadPart) / freq.QuadPart) * 1000;
+    QueryPerformanceCounter(&end_time);
+    double time_taken = ((double)(end_time.QuadPart - start_time.QuadPart) / frequency.QuadPart) * 1000;
 
-    reactionTimes[currentAttempt % NumberOfTrials] = timeTaken;
-    currentAttempt++;
+    reaction_times[current_attempt % number_of_trials] = time_taken;
+    current_attempt++;
 
-    currentState = STATE_RESULT;   // Change to results screen
+    Current_State = STATE_RESULT;   // Change to results screen
     InvalidateRect(hwnd, NULL, TRUE);  // Force repaint.
 }
 
 void HandleEarlyClick(HWND hwnd) {
-    currentState = STATE_EARLY;  // Early state
-    SetTimer(hwnd, TIMER_EARLY, EarlyResetDelay, NULL); // Early state eventually resets back to Ready state
+    Current_State = STATE_EARLY;  // Early state
+    SetTimer(hwnd, TIMER_EARLY, early_reset_delay, NULL); // Early state eventually resets back to Ready state
     InvalidateRect(hwnd, NULL, TRUE);
 }
 
 void ResetAll(HWND hwnd) { // This isn't used and I don't recall what the purpose would have been anyways...
-    currentAttempt = 0;
-    for (int i = 0; i < NumberOfTrials; i++) {
-        reactionTimes[i] = 0;
+    current_attempt = 0;
+    for (int i = 0; i < number_of_trials; i++) {
+        reaction_times[i] = 0;
     }
     ResetLogic(hwnd);
 }
