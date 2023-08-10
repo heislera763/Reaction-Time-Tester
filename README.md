@@ -1,16 +1,17 @@
-# Reaction Time Tester:
+# Reaction Time Tester
+This program enables users to measure their reaction times. Users can customize the program's functionality using an included configuration file.
 
-This is a basic program allowing users to measure their reaction times. A basic configuration file is included to let users easily change some functionality.
+### How it Works
+1. Ready State: The user waits for a prompt, visually indicated by the screen's color change.
+2. React State: Upon prompt, the user presses an alphanumeric key or clicks the mouse to record their reaction time.
+3. Result State: The program displays the reaction time and an average of previous results.
+4. Early State: If the user reacts before the "React" prompt, this state indicates an early reaction (i.e., a failure).
 
-The program works like so: It starts in the inital "Ready" state, in which the user waits for a change. After some time the screen will switch to the "React" state, which is when the user will either press an alphabet key or click their mouse to signify their reaction. After this is the "Result" state, which will display the time to react, as well as an average of the previous reactions. Also, if the user reacts before the "React" state, they will trigger the "Early" state, which signifies a failure.
+### Setup and Requirements
+1. Unzip the release folder wherever you want the program to be installed.
+2. Ensure that default.cfg is in the same directory as the program's executable for proper functioning.
+   - On the first launch, the program duplicates the contents of default.cfg into reaction.cfg. Users can modify reaction.cfg to customize settings. However, avoid altering default.cfg. If you need to reset reaction.cfg to default settings, delete it.
+3. The program currently supports only Windows and has only been test on Windows 11 Systems. Linux users may be able to achieve full functionality through compatibility layers like WINE.
 
-### The following can currently be configured in the .cfg file:
- - "Ready", "React", "Result", and "Early" screen colors
- - Delay
- - Number of trials to average
-
-# Background Info:
-
-This is a program I made while testing out the capabilities of GPT4 (via ChatGPT). It took a lot of verbose prompting, manual adjustments, and lots of diagnostics to get it into this state, but I am happy with the results. Please note that the program doesn't work correctly without reaction.cfg in the same folder as the executable.
-
-From my experimentation on a Windows 11 system it seems pretty robust in its current state, but I am not able to test on other systems easily at this time. As far as linux support goes I imagine Wine or a similar software could handle this very easily.
+# Background Info
+This is a program I made while testing out the capabilities of GPT4 (via ChatGPT). It took a lot of verbose prompting, manual adjustments, and lots of diagnostics to get it into this state, but I am happy with the results.
