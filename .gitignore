@@ -363,3 +363,4 @@ MigrationBackup/
 FodyWeavers.xsd
 *.exe
 /config/reaction.cfg
+/reaction-time-tester/RCa05572
