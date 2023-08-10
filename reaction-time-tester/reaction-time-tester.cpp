@@ -109,8 +109,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 
     // Register the window class.
     if (!RegisterClass(&wc)) {
-        MessageBox(NULL, L"Failed to register window class", L"Error", MB_OK);
-        return 0;
+        HandleError(L"Failed to register window class");
     }
 
     // Initialize brushes for painting.
@@ -189,7 +188,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
         DEFAULT_PITCH | FF_DONTCARE, fontName);
 
     if (!hFont) {
-        MessageBox(hwnd, L"Failed to create font.", L"Error", MB_OK);
+        HandleError(L"Failed to create font.");
     }
 
     // Enter the standard Windows message loop.
@@ -285,7 +284,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
         default:
             hBrush = hReadyBrush; // Default to a known brush to avoid undefined behavior.
-            MessageBox(hwnd, L"Invalid or undefined program state!", L"Error", MB_OK);
+            HandleError(L"Invalid or undefined program state!");
             break;
         }
 
@@ -370,9 +369,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         }
 
         if (GetRawInputData((HRAWINPUT)lParam, RID_INPUT, lpb, &dwSize, sizeof(RAWINPUTHEADER)) != dwSize) {
-            MessageBox(NULL, L"GetRawInputData did not return correct size!", L"Error", MB_OK);
+            HandleError(L"GetRawInputData did not return correct size!");
             delete[] lpb;
-            return 0;
         }
 
         RAWINPUT* raw = (RAWINPUT*)lpb;
@@ -457,8 +455,7 @@ bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength) {
     wchar_t defaultCfgPath[MAX_PATH];
 
     if (!GetModuleFileName(NULL, exePath, MAX_PATH)) {
-        MessageBox(NULL, L"Failed to get module file name", L"Error", MB_OK);
-        return false;  // Failed to get the module file name
+        HandleError(L"Failed to get module file name");  // Failed to get the module file name
     }
 
     wchar_t* lastSlash = wcsrchr(exePath, '\\');
@@ -476,16 +473,14 @@ bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength) {
         FILE* defaultFile;
         errno_t err1 = _wfopen_s(&defaultFile, defaultCfgPath, L"rb"); // open in binary mode for reading
         if (err1 != 0 || !defaultFile) {
-            MessageBox(NULL, L"Failed to open default.cfg", L"Error", MB_OK);
-            return false;
+            HandleError(L"Failed to open default.cfg");
         }
 
         FILE* newFile;
         errno_t err2 = _wfopen_s(&newFile, cfgPath, L"wb");  // open in binary mode for writing
         if (err2 != 0 || !newFile) {
             fclose(defaultFile);
-            MessageBox(NULL, L"Failed to create reaction.cfg", L"Error", MB_OK);
-            return false;
+            HandleError(L"Failed to create reaction.cfg");
         }
 
         char buffer[1024];
@@ -546,8 +541,7 @@ void LoadTextColorConfiguration(const wchar_t* cfgPath) {
 void AllocateMemoryForReactionTimes() {
     reactionTimes = (double*)malloc(sizeof(double) * NumberOfTrials);
     if (reactionTimes == NULL) {
-        MessageBox(NULL, L"Failed to allocate memory for reaction times!", L"Error", MB_OK);
-        exit(1);
+        HandleError(L"Failed to allocate memory for reaction times!");
     }
     memset(reactionTimes, 0, sizeof(double) * NumberOfTrials);
 }
@@ -656,8 +650,7 @@ bool RegisterForRawInput(HWND hwnd, USHORT usage) {
     rid.hwndTarget = hwnd;
 
     if (!RegisterRawInputDevices(&rid, 1, sizeof(rid))) {
-        MessageBox(NULL, L"Failed to register raw input device", L"Error", MB_OK);
-        return false;
+        HandleError(L"Failed to register raw input device");
     }
     return true;
 }
