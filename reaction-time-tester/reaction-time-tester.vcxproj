@@ -19,9 +19,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="reaction-time-tester.c">
-      <FileType>CppCode</FileType>
-    </ClCompile>
+    <ClCompile Include="reaction-time-tester.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="resource.h" />
