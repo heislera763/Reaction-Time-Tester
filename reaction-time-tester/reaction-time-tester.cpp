@@ -4,11 +4,6 @@
 #include <stdio.h>
 #include "Resource.h"
 
-#define TIMER_READY 1
-#define TIMER_REACT 2
-#define TIMER_EARLY 3
-#define TIME_BUFFER_SIZE 20
-#define CHECK_RGB_VALUE(v) ((v) >= 0 && (v) <= 255)
 #define DEFAULT_MIN_DELAY 1000
 #define DEFAULT_MAX_DELAY 3000
 #define DEFAULT_EARLY_RESET_DELAY 3000
@@ -16,45 +11,41 @@
 #define DEFAULT_NUM_TRIALS 5
 #define DEFAULT_RAWKEYBOARDENABLE 1
 #define DEFAULT_RAWMOUSEENABLE 1
-#define MAX_KEYS 256
 #define DEFAULT_FONT_SIZE 32
 #define DEFAULT_FONT_NAME L"Arial"
 #define DEFAULT_FONT_STYLE L"Regular"
+#define TIME_BUFFER_SIZE 20
+#define MAX_KEYS 256
+#define TIMER_READY 1
+#define TIMER_REACT 2
+#define TIMER_EARLY 3
 
+// Configuration and Settings
 COLORREF ReadyColor[3], ReactColor[3], EarlyColor[3], ResultColor[3], EarlyFontColor[3], ResultsFontColor[3];
 int MinDelay, MaxDelay, NumberOfTrials, EarlyResetDelay, VirtualDebounce, RawKeyboardEnable, RawMouseEnable, RawInputDebug, LogEnable;
-double* reactionTimes = NULL; // Array to store the last 5 reaction times.
-int currentAttempt = 0;
-int TotalTrialNumber = 0;
-int keyStates[MAX_KEYS] = { 0 }; // 0: not pressed, 1: pressed
 wchar_t logFileName[MAX_PATH]; // Log file name global for ease
-
-// Font stuff
 wchar_t fontName[MAX_PATH];
 wchar_t fontStyle[MAX_PATH];
 int fontSize;
 
-// Window content hover check
-bool isCursorOverClientArea = false;
-
-// Define states
-typedef enum {
+// Program State and Data
+typedef enum { // Define states
     STATE_READY,
     STATE_REACT,
     STATE_EARLY,
     STATE_RESULT
 } ProgramState;
+ProgramState currentState = STATE_READY; // Initial state
+double* reactionTimes = NULL; // Array to store the last 5 reaction times.
+int currentAttempt = 0;
+int TotalTrialNumber = 0;
+int keyStates[MAX_KEYS] = { 0 }; // 0: not pressed, 1: pressed
+LARGE_INTEGER startTime, endTime, freq; // For high-resolution timing
+bool isCursorOverClientArea = false; // Window content hover check
 
-// Global variable to maintain the program's state
-ProgramState currentState = STATE_READY;
-
-LARGE_INTEGER startTime, endTime, freq, lastInputTime; // For high-resolution timing.
-
-// Font for text.
+// UI and Rendering
+HBRUSH hReadyBrush, hReactBrush, hEarlyBrush, hResultBrush; // Brushes for painting the window
 HFONT hFont;
-
-// Brushes for painting the window background.
-HBRUSH hReadyBrush, hReactBrush, hEarlyBrush, hResultBrush;
 
 // Forward declarations for window procedure and other functions.
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -65,6 +56,7 @@ void ValidateColors(COLORREF color[]);
 void ValidateDelays();
 void RemoveComment(wchar_t* str);
 int GenerateRandomDelay(int min, int max);
+void BrushCleanup();
 
 // Configuration and setup functions
 bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength);
@@ -93,9 +85,6 @@ void HandleReactClick(HWND hwnd);
 void HandleEarlyClick(HWND hwnd);
 void ResetAll(HWND hwnd);
 
-// Cleanup function
-void BrushCleanup();
-
 
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
     QueryPerformanceFrequency(&freq);
@@ -104,7 +93,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 
     WNDCLASS wc = {};
 
-    // Define properties for our window class.
+    // Define properties for our window structs
     wc.lpfnWndProc = WindowProc;
     wc.hInstance = hInstance;
     wc.lpszClassName = CLASS_NAME;
@@ -226,31 +215,28 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
     case WM_SETCURSOR:
         switch (LOWORD(lParam)) {
-        case HTCLIENT:
-            // Set the cursor to a hand cursor
-            // We may want to implement further logic here at some point
-            // For example, checking if the mouse is over clickable elements.
+        case HTCLIENT: // In this section we use isCursorOverClientArea to signify hovering over the window contents, I wonder if we can check cursor state directly to get rid of this var?
             isCursorOverClientArea = true;
-            SetCursor(LoadCursor(NULL, IDC_HAND));
+            SetCursor(LoadCursor(NULL, IDC_HAND)); // Set the cursor to a hand cursor
             break;
         case HTLEFT:
         case HTRIGHT:
-            isCursorOverClientArea = false;  // Add this line
+            isCursorOverClientArea = false;
             SetCursor(LoadCursor(NULL, IDC_SIZEWE)); // Left or right border (resize cursor)
             break;
         case HTTOP:
         case HTBOTTOM:
-            isCursorOverClientArea = false;  // Add this line
+            isCursorOverClientArea = false;
             SetCursor(LoadCursor(NULL, IDC_SIZENS)); // Top or bottom border (resize cursor)
             break;
         case HTTOPLEFT:
         case HTBOTTOMRIGHT:
-            isCursorOverClientArea = false;  // Add this line
+            isCursorOverClientArea = false;
             SetCursor(LoadCursor(NULL, IDC_SIZENWSE)); // Top-left or bottom-right corner (diagonal resize cursor)
             break;
         case HTTOPRIGHT:
         case HTBOTTOMLEFT:
-            isCursorOverClientArea = false;  // Add this line
+            isCursorOverClientArea = false;
             SetCursor(LoadCursor(NULL, IDC_SIZENESW)); // Top-right or bottom-left corner (diagonal resize cursor)
             break;
         default:
@@ -389,7 +375,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     }
     break;
 
-    // Handle generic keyboard input
+    // Handle generic keyboard input:
     case WM_KEYDOWN:
     case WM_KEYUP:
         if (RawKeyboardEnable == 0) {
@@ -397,7 +383,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         }
         break;
 
-    // Handle generic mouse input
+    // Handle generic mouse input:
     case WM_LBUTTONDOWN:
     case WM_LBUTTONUP:
         if (RawMouseEnable == 0) {
@@ -417,66 +403,73 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 }
 
 
-// Utility Functions
-void HandleError(const wchar_t* errorMessage) {
+// Utility Functions:
+void HandleError(const wchar_t* errorMessage) { // Generic error handler
     MessageBox(NULL, errorMessage, L"Error", MB_OK);
     exit(1);
 }
 
 void ValidateColors(COLORREF color[]) {
-    if (!CHECK_RGB_VALUE(color[0]) ||
-        !CHECK_RGB_VALUE(color[1]) ||
-        !CHECK_RGB_VALUE(color[2])) {
-        HandleError(L"Invalid color values in the configuration!");
+    for (int i = 0; i < 3; i++) {
+        if (color[i] < 0 || color[i] > 255) {
+            HandleError(L"Invalid color values in the configuration!");
+            return;
+        }
     }
 }
 
-void ValidateDelays() {
+void ValidateDelays() { // Check for validity of delay. Very single purpose, may want to rewrite for modularity/flexibility
     if (MinDelay <= 0 || MaxDelay <= 0 || MaxDelay < MinDelay || VirtualDebounce < 0 || EarlyResetDelay <= 0) {
         HandleError(L"Invalid delay values in the configuration!");
     }
 }
 
-void RemoveComment(wchar_t* str) { //Filter comments out when reading strings from .cfg
-    wchar_t* semicolonPos = wcschr(str, L';');
+void RemoveComment(wchar_t* str) { // Removes comments and trailing spaces from strings read from .cfg files
+    wchar_t* semicolonPos = wcschr(str, L';'); // Locate the first occurrence of a semicolon, which denotes the start of a comment.
     if (semicolonPos) {
-        *semicolonPos = L'\0';  // Set the position of the semicolon to null terminator.
+        *semicolonPos = L'\0';  // Terminate the string at the start of the comment.
     }
 
-    // Trim trailing spaces if needed
     size_t len = wcslen(str);
-    while (len > 0 && iswspace(str[len - 1])) {
+    while (len > 0 && iswspace(str[len - 1])) { // Loop to remove any trailing whitespace after excluding the comment.
         str[len - 1] = L'\0';
         len--;
     }
 }
 
-int GenerateRandomDelay(int min, int max) {
+
+int GenerateRandomDelay(int min, int max) { // Generate a random delay given a min and max delay value
     return rand() % (max - min + 1) + min;
 }
 
+void BrushCleanup() { // Hardcoded to delete only these brushes, should probably replace with a more modular approach...
+    if (hReadyBrush) DeleteObject(hReadyBrush);
+    if (hReactBrush) DeleteObject(hReactBrush);
+    if (hEarlyBrush) DeleteObject(hEarlyBrush);
+    if (hResultBrush) DeleteObject(hResultBrush);
+}
+
+
 // Configuration and setup functions
-bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength) {
+bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength) { // Initializes paths and possibly copies default.cfg to reaction.cfg
     wchar_t exePath[MAX_PATH];
     wchar_t defaultCfgPath[MAX_PATH];
 
-    if (!GetModuleFileName(NULL, exePath, MAX_PATH)) {
+    if (!GetModuleFileName(NULL, exePath, MAX_PATH)) {  // Failed to get current module's file path.
         HandleError(L"Failed to get module file name");
         return false;
     }
 
-    wchar_t* lastSlash = wcsrchr(exePath, '\\');
-    if (lastSlash) {
-        *(lastSlash + 1) = L'\0';
-    }
+    wchar_t* lastSlash = wcsrchr(exePath, '\\');  // Find the last directory separator.
+    if (lastSlash) *(lastSlash + 1) = L'\0';  // Null-terminate to get directory path.
 
     if (swprintf_s(cfgPath, maxLength, L"%s%s", exePath, L"reaction.cfg") < 0 ||
-        swprintf_s(defaultCfgPath, MAX_PATH, L"%s%s", exePath, L"default.cfg") < 0) {
+        swprintf_s(defaultCfgPath, MAX_PATH, L"%s%s", exePath, L"default.cfg") < 0) {  // Format paths for config files.
         HandleError(L"Failed to create config paths");
         return false;
     }
 
-    if (GetFileAttributes(cfgPath) == INVALID_FILE_ATTRIBUTES) {
+    if (GetFileAttributes(cfgPath) == INVALID_FILE_ATTRIBUTES) {  // If reaction.cfg doesn't exist, copy from default.cfg.
         FILE* defaultFile;
         errno_t err1 = _wfopen_s(&defaultFile, defaultCfgPath, L"rb");
         if (err1 != 0 || !defaultFile) {
@@ -494,51 +487,43 @@ bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength) {
 
         char buffer[1024];
         size_t bytesRead;
-        while ((bytesRead = fread(buffer, 1, sizeof(buffer), defaultFile)) > 0) {
-            if (fwrite(buffer, 1, bytesRead, newFile) < bytesRead) {
-                fclose(newFile);
-                fclose(defaultFile);
+        while ((bytesRead = fread(buffer, 1, sizeof(buffer), defaultFile)) > 0) {  // Copy contents from default.cfg to reaction.cfg in chunks.
+            if (fwrite(buffer, 1, bytesRead, newFile) < bytesRead) { // Has write operation written the correct number of bytes?
+                fclose(newFile); fclose(defaultFile);
                 HandleError(L"Failed to write to reaction.cfg");
                 return false;
             }
         }
-
-        fclose(newFile);
-        fclose(defaultFile);
+        fclose(newFile); fclose(defaultFile);
     }
-
     return true;
 }
 
-
 void LoadColorConfiguration(const wchar_t* cfgPath, const wchar_t* sectionName, const wchar_t* colorName, COLORREF* targetColorArray) {
     wchar_t buffer[255];
-    GetPrivateProfileString(sectionName, colorName, L"", buffer, sizeof(buffer) / sizeof(wchar_t), cfgPath);
+    GetPrivateProfileString(sectionName, colorName, L"", buffer, sizeof(buffer) / sizeof(wchar_t), cfgPath);  // Retrieve color configuration as comma-separated RGB values
 
-    if (wcslen(buffer) == 0) {
+    if (wcslen(buffer) == 0) {  // Check color data retrieval
         HandleError(L"Failed to read color configuration");
     }
 
-    swscanf_s(buffer, L"%d,%d,%d", &targetColorArray[0], &targetColorArray[1], &targetColorArray[2]);
-    ValidateColors(targetColorArray);
+    swscanf_s(buffer, L"%d,%d,%d", &targetColorArray[0], &targetColorArray[1], &targetColorArray[2]);  // Extract individual RGB values.
+    ValidateColors(targetColorArray);  // Validate RGB values
 }
 
 void LoadFontConfiguration(const wchar_t* cfgPath, wchar_t* targetFontName, size_t maxLength, int* fontSize, wchar_t* fontStyle, size_t fontStyleLength) {
-
-    // Load font name
-    GetPrivateProfileString(L"Fonts", L"FontName", DEFAULT_FONT_NAME, targetFontName, (DWORD)maxLength, cfgPath);
-    RemoveComment(targetFontName);
-    if (wcslen(targetFontName) == 0) {
+    GetPrivateProfileString(L"Fonts", L"FontName", DEFAULT_FONT_NAME, targetFontName, (DWORD)maxLength, cfgPath);  // Retrieve font name
+    RemoveComment(targetFontName);  // Cleanup any comments from the retrieved font name
+    if (wcslen(targetFontName) == 0) {  // Check font name retrieval
         HandleError(L"Failed to read font configuration");
     }
 
-    // Load font size
-    *fontSize = GetPrivateProfileInt(L"Fonts", L"FontSize", DEFAULT_FONT_SIZE, cfgPath);
+    *fontSize = GetPrivateProfileInt(L"Fonts", L"FontSize", DEFAULT_FONT_SIZE, cfgPath);  // Retrieve font size
 
-    // Load font style
-    GetPrivateProfileString(L"Fonts", L"FontStyle", DEFAULT_FONT_STYLE, fontStyle, (DWORD)fontStyleLength, cfgPath);
-    RemoveComment(fontStyle);
+    GetPrivateProfileString(L"Fonts", L"FontStyle", DEFAULT_FONT_STYLE, fontStyle, (DWORD)fontStyleLength, cfgPath);  // Retrieve font style
+    RemoveComment(fontStyle);  // Cleanup any comments from the retrieved font style.
 }
+
 
 void LoadTrialConfiguration(const wchar_t* cfgPath) {
     NumberOfTrials = GetPrivateProfileInt(L"Trial", L"NumberOfTrials", DEFAULT_NUM_TRIALS, cfgPath);
@@ -658,6 +643,7 @@ bool AppendToLog(double x, int y) {  // Handles log file operations
     return false;
 }
 
+
 // Input handling functions
 bool RegisterForRawInput(HWND hwnd, USHORT usage) {
     RAWINPUTDEVICE rid{};
@@ -756,6 +742,7 @@ void UpdateKeyState(int vk, HWND hwnd) {
 }
 
 
+
 // Main application logic functions
 void ResetLogic(HWND hwnd) {
     // Kill all timers.
@@ -784,24 +771,15 @@ void HandleReactClick(HWND hwnd) {
 }
 
 void HandleEarlyClick(HWND hwnd) {
-    currentState = STATE_EARLY;  // Show the fail screen
-    SetTimer(hwnd, TIMER_EARLY, EarlyResetDelay, NULL);
+    currentState = STATE_EARLY;  // Early state
+    SetTimer(hwnd, TIMER_EARLY, EarlyResetDelay, NULL); // Early state eventually resets back to Ready state
     InvalidateRect(hwnd, NULL, TRUE);
 }
 
-void ResetAll(HWND hwnd) {
+void ResetAll(HWND hwnd) { // This isn't used and I don't recall what the purpose would have been anyways...
     currentAttempt = 0;
     for (int i = 0; i < NumberOfTrials; i++) {
         reactionTimes[i] = 0;
     }
     ResetLogic(hwnd);
-}
-
-
-// Cleanup Function
-void BrushCleanup() {
-    if (hReadyBrush) DeleteObject(hReadyBrush);
-    if (hReactBrush) DeleteObject(hReactBrush);
-    if (hEarlyBrush) DeleteObject(hEarlyBrush);
-    if (hResultBrush) DeleteObject(hResultBrush);
 }
