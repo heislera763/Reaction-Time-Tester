@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <stdio.h>
+#include <stdbool.h>
 #include "Resource.h"
 
 #define DEFAULT_MIN_DELAY 1000
@@ -91,7 +92,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 
     const wchar_t CLASS_NAME[] = L"Sample Window Class";
 
-    WNDCLASS wc = {};
+    WNDCLASS wc = {0};
 
     // Define properties for our window structs
     wc.lpfnWndProc = WindowProc;
@@ -183,7 +184,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     }
 
     // Enter the standard Windows message loop.
-    MSG msg = {};
+    MSG msg = {0};
     while (GetMessage(&msg, NULL, 0, 0)) {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
@@ -533,7 +534,7 @@ void LoadTrialConfiguration(const wchar_t* cfgPath) {
 }
 
 void LoadTextColorConfiguration(const wchar_t* cfgPath) {
-    wchar_t buffer[MAX_PATH]{};
+    wchar_t buffer[MAX_PATH] = L"";
     LoadColorConfiguration(cfgPath, L"Fonts", L"EarlyFontColor", EarlyFontColor);
     LoadColorConfiguration(cfgPath, L"Fonts", L"ResultsFontColor", ResultsFontColor);
 }
@@ -646,7 +647,7 @@ bool AppendToLog(double x, int y) {  // Handles log file operations
 
 // Input handling functions
 bool RegisterForRawInput(HWND hwnd, USHORT usage) {
-    RAWINPUTDEVICE rid{};
+    RAWINPUTDEVICE rid = {0};
     rid.usUsagePage = 0x01;
     rid.usUsage = usage;
     rid.dwFlags = 0;
