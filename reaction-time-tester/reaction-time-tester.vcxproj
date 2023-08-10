@@ -28,7 +28,8 @@
     <ResourceCompile Include="reaction-time-tester.rc" />
   </ItemGroup>
   <ItemGroup>
-    <Image Include="..\..\..\..\Pictures\junk\icon.ico" />
+    <Image Include="..\..\..\..\Pictures\icon.ico" />
+    <Image Include="..\..\..\..\Pictures\icon.png" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>

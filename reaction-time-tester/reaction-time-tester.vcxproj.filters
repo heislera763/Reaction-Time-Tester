@@ -30,7 +30,10 @@
     </ResourceCompile>
   </ItemGroup>
   <ItemGroup>
-    <Image Include="..\..\..\..\Pictures\junk\icon.ico">
+    <Image Include="..\..\..\..\Pictures\icon.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="..\..\..\..\Pictures\icon.ico">
       <Filter>Resource Files</Filter>
     </Image>
   </ItemGroup>
