@@ -20,6 +20,7 @@
 #define TIMER_READY 1
 #define TIMER_REACT 2
 #define TIMER_EARLY 3
+#define TIMER_DEBOUNCE 4
 
 // Configuration and Settings
 COLORREF ReadyColor[3], ReactColor[3], EarlyColor[3], ResultColor[3], EarlyFontColor[3], ResultsFontColor[3];
@@ -42,7 +43,12 @@ int currentAttempt = 0;
 int TotalTrialNumber = 0;
 int keyStates[MAX_KEYS] = { 0 }; // 0: not pressed, 1: pressed
 LARGE_INTEGER startTime, endTime, freq; // For high-resolution timing
-bool isCursorOverClientArea = false; // Window content hover check
+typedef struct { // Struct for determining whether an input is allowable
+    bool Mouse;
+    bool Keyboard;
+} InputState;
+InputState InputAllowed = { true, true }; // Input allowed or not
+bool DebounceActive = false; // This is a global indicator for whether or not program is halting inputs for Virtual Debounce feature
 
 // UI and Rendering
 HBRUSH hReadyBrush, hReactBrush, hEarlyBrush, hResultBrush; // Brushes for painting the window
@@ -216,32 +222,32 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
     case WM_SETCURSOR:
         switch (LOWORD(lParam)) {
-        case HTCLIENT: // In this section we use isCursorOverClientArea to signify hovering over the window contents, I wonder if we can check cursor state directly to get rid of this var?
-            isCursorOverClientArea = true;
+        case HTCLIENT: // In this section we use InputAllowed to change state of whether or not mouse can input commands
+            if (!DebounceActive) { InputAllowed.Mouse = true; }
             SetCursor(LoadCursor(NULL, IDC_HAND)); // Set the cursor to a hand cursor
             break;
         case HTLEFT:
         case HTRIGHT:
-            isCursorOverClientArea = false;
+            InputAllowed.Mouse = false;
             SetCursor(LoadCursor(NULL, IDC_SIZEWE)); // Left or right border (resize cursor)
             break;
         case HTTOP:
         case HTBOTTOM:
-            isCursorOverClientArea = false;
+            InputAllowed.Mouse = false;
             SetCursor(LoadCursor(NULL, IDC_SIZENS)); // Top or bottom border (resize cursor)
             break;
         case HTTOPLEFT:
         case HTBOTTOMRIGHT:
-            isCursorOverClientArea = false;
+            InputAllowed.Mouse = false;
             SetCursor(LoadCursor(NULL, IDC_SIZENWSE)); // Top-left or bottom-right corner (diagonal resize cursor)
             break;
         case HTTOPRIGHT:
         case HTBOTTOMLEFT:
-            isCursorOverClientArea = false;
+            InputAllowed.Mouse = false;
             SetCursor(LoadCursor(NULL, IDC_SIZENESW)); // Top-right or bottom-left corner (diagonal resize cursor)
             break;
         default:
-            isCursorOverClientArea = false;
+            InputAllowed.Mouse = false;
             SetCursor(LoadCursor(NULL, IDC_ARROW)); // Use the default cursor
             break;
         }
@@ -342,6 +348,12 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
         case TIMER_EARLY:
             ResetLogic(hwnd); // Reset the game after showing the "too early" state.
+            break;
+
+        case TIMER_DEBOUNCE:  // Debounce implementation is okay at this point, I 
+            InputAllowed.Mouse = true;
+            InputAllowed.Keyboard = true;
+            DebounceActive = false;
             break;
 
         }
@@ -659,9 +671,9 @@ bool RegisterForRawInput(HWND hwnd, USHORT usage) {
     return true;
 }
 
-void HandleInput(HWND hwnd) {   // Primary "game" logic is done here
-    if (!isCursorOverClientArea) {
-        return;  // Don't process the input if the cursor is not over the client area
+void HandleInput(HWND hwnd, bool x) {   // Primary "game" logic is done here. x variable to indicate the type of input device
+    if ((!InputAllowed.Mouse && x) || (!InputAllowed.Keyboard && !x)) {
+        return;  // Don't process the input if device is currently blocked
     }
     if (currentState == STATE_REACT) {
         HandleReactClick(hwnd);
@@ -678,7 +690,12 @@ void HandleInput(HWND hwnd) {   // Primary "game" logic is done here
     else {
         HandleEarlyClick(hwnd);
     }
-    
+    if ((VirtualDebounce > 0) && (InputAllowed.Mouse || InputAllowed.Keyboard)) { // Block inputs if debounce is enabled and either input devices is active
+        InputAllowed.Mouse = false;
+        InputAllowed.Keyboard = false;
+        DebounceActive = true;
+        SetTimer(hwnd, TIMER_DEBOUNCE, VirtualDebounce, NULL);
+    }
 }
 
 void HandleGenericKeyboardInput(HWND hwnd) {
@@ -691,7 +708,7 @@ void HandleRawKeyboardInput(RAWINPUT* raw, HWND hwnd) {
     int vkey = raw->data.keyboard.VKey;
 
     if (raw->data.keyboard.Flags == RI_KEY_MAKE && IsAlphanumeric(vkey) && !keyStates[vkey]) {
-        HandleInput(hwnd);
+        HandleInput(hwnd, 0);
         keyStates[vkey] = 1; // Latch the key state
     }
     else if (raw->data.keyboard.Flags == RI_KEY_BREAK) {
@@ -704,7 +721,7 @@ void HandleGenericMouseInput(HWND hwnd) {
     int isButtonPressed = GetAsyncKeyState(VK_LBUTTON) & 0x8000;
 
     if (isButtonPressed && !wasButtonPressed) { // Check for transition from up to down
-        HandleInput(hwnd);
+        HandleInput(hwnd, 1);
         wasButtonPressed = 1; // Latch the button state
     }
     else if (!isButtonPressed && wasButtonPressed) { // Check for transition from down to up
@@ -716,7 +733,7 @@ void HandleRawMouseInput(RAWINPUT* raw, HWND hwnd) {
     static int wasButtonPressed = 0; // 0: not pressed, 1: pressed
 
     if (raw->data.mouse.usButtonFlags & RI_MOUSE_LEFT_BUTTON_DOWN && !wasButtonPressed) {
-        HandleInput(hwnd);
+        HandleInput(hwnd, 1);
         wasButtonPressed = 1; // Latch the button state
     }
     else if (raw->data.mouse.usButtonFlags & RI_MOUSE_LEFT_BUTTON_UP && wasButtonPressed) {
@@ -733,7 +750,7 @@ void UpdateKeyState(int vk, HWND hwnd) {
     if (IsAlphanumeric(vk)) {
         bool isKeyPressed = GetAsyncKeyState(vk) & 0x8000;
         if (isKeyPressed && !keyStates[vk]) {
-            HandleInput(hwnd);
+            HandleInput(hwnd, 0);
             keyStates[vk] = 1; // Latch the key state
         }
         else if (!isKeyPressed && keyStates[vk]) {
@@ -743,13 +760,13 @@ void UpdateKeyState(int vk, HWND hwnd) {
 }
 
 
-
 // Main application logic functions
 void ResetLogic(HWND hwnd) {
     // Kill all timers.
     KillTimer(hwnd, TIMER_READY);
     KillTimer(hwnd, TIMER_REACT);
     KillTimer(hwnd, TIMER_EARLY);
+    KillTimer(hwnd, TIMER_DEBOUNCE); // Not clear if this is needed right now
 
     currentState = STATE_READY;
    
