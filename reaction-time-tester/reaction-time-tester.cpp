@@ -9,7 +9,6 @@
 #define TIMER_EARLY 3
 #define TIME_BUFFER_SIZE 20
 #define CHECK_RGB_VALUE(v) ((v) >= 0 && (v) <= 255)
-#define MAXMINDELAY (rand() % (MaxDelay - MinDelay + 1)) + MinDelay
 #define DEFAULT_MIN_DELAY 1000
 #define DEFAULT_MAX_DELAY 3000
 #define DEFAULT_EARLY_RESET_DELAY 3000
@@ -65,6 +64,7 @@ void HandleError(const wchar_t* errorMessage);
 void ValidateColors(COLORREF color[]);
 void ValidateDelays();
 void RemoveComment(wchar_t* str);
+int GenerateRandomDelay(int min, int max);
 
 // Configuration and setup functions
 bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength);
@@ -84,6 +84,8 @@ void HandleGenericKeyboardInput(HWND hwnd);
 void HandleRawKeyboardInput(RAWINPUT* raw, HWND hwnd);
 void HandleGenericMouseInput(HWND hwnd);
 void HandleRawMouseInput(RAWINPUT* raw, HWND hwnd);
+bool IsAlphanumeric(int vkey);
+void UpdateKeyState(int vk, HWND hwnd);
 
 // Main application logic functions
 void ResetLogic(HWND hwnd);
@@ -169,8 +171,8 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     // Seed the random number generator.
     srand((unsigned)time(NULL));
 
-    // Schedule the transition to green after a random delay.
-    SetTimer(hwnd, TIMER_READY, MAXMINDELAY, NULL);
+    // Schedule the transition to react after a random delay.
+    SetTimer(hwnd, TIMER_READY, GenerateRandomDelay(MinDelay, MaxDelay), NULL);
 
     int fontWeight = FW_REGULAR;
     BOOL isItalic = FALSE;
@@ -340,7 +342,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         case TIMER_READY:
             currentState = STATE_READY;
             KillTimer(hwnd, TIMER_READY);
-            SetTimer(hwnd, TIMER_REACT, MAXMINDELAY, NULL);
+            SetTimer(hwnd, TIMER_REACT, GenerateRandomDelay(MinDelay, MaxDelay), NULL);
             break;
 
         case TIMER_REACT:
@@ -362,7 +364,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     {
         UINT dwSize = 0;
         GetRawInputData((HRAWINPUT)lParam, RID_INPUT, NULL, &dwSize, sizeof(RAWINPUTHEADER));
-        LPBYTE lpb = new BYTE[dwSize];
+        LPBYTE lpb = (LPBYTE)malloc(dwSize * sizeof(BYTE));
 
         if (lpb == NULL) {
             return 0;
@@ -370,7 +372,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
         if (GetRawInputData((HRAWINPUT)lParam, RID_INPUT, lpb, &dwSize, sizeof(RAWINPUTHEADER)) != dwSize) {
             HandleError(L"GetRawInputData did not return correct size!");
-            delete[] lpb;
+            free(lpb);
+            return 0; // added to ensure function exits after an error
         }
 
         RAWINPUT* raw = (RAWINPUT*)lpb;
@@ -382,7 +385,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             HandleRawMouseInput(raw, hwnd);
         }
 
-        delete[] lpb;
+        free(lpb);
     }
     break;
 
@@ -448,6 +451,9 @@ void RemoveComment(wchar_t* str) { //Filter comments out when reading strings fr
     }
 }
 
+int GenerateRandomDelay(int min, int max) {
+    return rand() % (max - min + 1) + min;
+}
 
 // Configuration and setup functions
 bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength) {
@@ -455,7 +461,8 @@ bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength) {
     wchar_t defaultCfgPath[MAX_PATH];
 
     if (!GetModuleFileName(NULL, exePath, MAX_PATH)) {
-        HandleError(L"Failed to get module file name");  // Failed to get the module file name
+        HandleError(L"Failed to get module file name");
+        return false;
     }
 
     wchar_t* lastSlash = wcsrchr(exePath, '\\');
@@ -463,38 +470,46 @@ bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength) {
         *(lastSlash + 1) = L'\0';
     }
 
-    swprintf_s(cfgPath, maxLength, L"%s%s", exePath, L"reaction.cfg");
-    swprintf_s(defaultCfgPath, MAX_PATH, L"%s%s", exePath, L"default.cfg");
+    if (swprintf_s(cfgPath, maxLength, L"%s%s", exePath, L"reaction.cfg") < 0 ||
+        swprintf_s(defaultCfgPath, MAX_PATH, L"%s%s", exePath, L"default.cfg") < 0) {
+        HandleError(L"Failed to create config paths");
+        return false;
+    }
 
-    // Check if reaction.cfg exists
     if (GetFileAttributes(cfgPath) == INVALID_FILE_ATTRIBUTES) {
-        // If reaction.cfg does not exist, copy from default.cfg
-
         FILE* defaultFile;
-        errno_t err1 = _wfopen_s(&defaultFile, defaultCfgPath, L"rb"); // open in binary mode for reading
+        errno_t err1 = _wfopen_s(&defaultFile, defaultCfgPath, L"rb");
         if (err1 != 0 || !defaultFile) {
             HandleError(L"Failed to open default.cfg");
+            return false;
         }
 
         FILE* newFile;
-        errno_t err2 = _wfopen_s(&newFile, cfgPath, L"wb");  // open in binary mode for writing
+        errno_t err2 = _wfopen_s(&newFile, cfgPath, L"wb");
         if (err2 != 0 || !newFile) {
             fclose(defaultFile);
             HandleError(L"Failed to create reaction.cfg");
+            return false;
         }
 
         char buffer[1024];
         size_t bytesRead;
         while ((bytesRead = fread(buffer, 1, sizeof(buffer), defaultFile)) > 0) {
-            fwrite(buffer, 1, bytesRead, newFile);
+            if (fwrite(buffer, 1, bytesRead, newFile) < bytesRead) {
+                fclose(newFile);
+                fclose(defaultFile);
+                HandleError(L"Failed to write to reaction.cfg");
+                return false;
+            }
         }
 
         fclose(newFile);
         fclose(defaultFile);
     }
 
-    return true;  // Successfully obtained the config path
+    return true;
 }
+
 
 void LoadColorConfiguration(const wchar_t* cfgPath, const wchar_t* sectionName, const wchar_t* colorName, COLORREF* targetColorArray) {
     wchar_t buffer[255];
@@ -539,11 +554,13 @@ void LoadTextColorConfiguration(const wchar_t* cfgPath) {
 }
 
 void AllocateMemoryForReactionTimes() {
-    reactionTimes = (double*)malloc(sizeof(double) * NumberOfTrials);
+    size_t totalSize = sizeof(double) * NumberOfTrials;
+    reactionTimes = (double*)malloc(totalSize);
     if (reactionTimes == NULL) {
         HandleError(L"Failed to allocate memory for reaction times!");
+        return; // Return to prevent further execution
     }
-    memset(reactionTimes, 0, sizeof(double) * NumberOfTrials);
+    memset(reactionTimes, 0, totalSize);
 }
 
 void LoadConfig() {
@@ -674,36 +691,21 @@ void HandleInput(HWND hwnd) {   // Primary "game" logic is done here
     else {
         HandleEarlyClick(hwnd);
     }
-    Sleep(VirtualDebounce); // Rudimentary "debounce." Seems to work okay for this application
+    
 }
 
 void HandleGenericKeyboardInput(HWND hwnd) {
-    for (int vk = 0x30; vk <= 0x5A; vk++) {
-        if (vk <= 0x39 || (vk >= 0x41 && vk <= 0x5A)) {
-            bool isKeyPressed = GetAsyncKeyState(vk) & 0x8000;
-            if (isKeyPressed && !keyStates[vk]) {
-                HandleInput(hwnd);
-                keyStates[vk] = 1; // Latch the key state
-            }
-            else if (!isKeyPressed && keyStates[vk]) {
-                keyStates[vk] = 0; // Unlatch on key release
-            }
-        }
+    for (int vk = 0; vk <= 255; vk++) { // loop through all possible VK values
+        UpdateKeyState(vk, hwnd);
     }
 }
 
 void HandleRawKeyboardInput(RAWINPUT* raw, HWND hwnd) {
     int vkey = raw->data.keyboard.VKey;
 
-    if (raw->data.keyboard.Flags == RI_KEY_MAKE) {
-        if (!keyStates[vkey]) {
-            if ((vkey >= 0x30 && vkey <= 0x39) || // '0' to '9'
-                (vkey >= 0x41 && vkey <= 0x5A))   // 'A' to 'Z'
-            {
-                HandleInput(hwnd);
-                keyStates[vkey] = 1; // Latch the key state
-            }
-        }
+    if (raw->data.keyboard.Flags == RI_KEY_MAKE && IsAlphanumeric(vkey) && !keyStates[vkey]) {
+        HandleInput(hwnd);
+        keyStates[vkey] = 1; // Latch the key state
     }
     else if (raw->data.keyboard.Flags == RI_KEY_BREAK) {
         keyStates[vkey] = 0; // Unlatch on key release
@@ -735,6 +737,24 @@ void HandleRawMouseInput(RAWINPUT* raw, HWND hwnd) {
     }
 }
 
+bool IsAlphanumeric(int vkey) {
+    return (vkey >= '0' && vkey <= '9') || // '0' to '9'
+        (vkey >= 'A' && vkey <= 'Z');   // 'A' to 'Z'
+}
+
+void UpdateKeyState(int vk, HWND hwnd) {
+    if (IsAlphanumeric(vk)) {
+        bool isKeyPressed = GetAsyncKeyState(vk) & 0x8000;
+        if (isKeyPressed && !keyStates[vk]) {
+            HandleInput(hwnd);
+            keyStates[vk] = 1; // Latch the key state
+        }
+        else if (!isKeyPressed && keyStates[vk]) {
+            keyStates[vk] = 0; // Unlatch on key release
+        }
+    }
+}
+
 
 // Main application logic functions
 void ResetLogic(HWND hwnd) {
@@ -746,7 +766,7 @@ void ResetLogic(HWND hwnd) {
     currentState = STATE_READY;
    
     // Schedule the transition to green after a random delay.
-    SetTimer(hwnd, TIMER_READY, MAXMINDELAY, NULL);
+    SetTimer(hwnd, TIMER_READY, GenerateRandomDelay(MinDelay,MaxDelay), NULL);
 
     // Force repaint.
     InvalidateRect(hwnd, NULL, TRUE);
