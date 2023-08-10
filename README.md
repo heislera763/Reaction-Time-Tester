@@ -14,4 +14,4 @@ This program allows users to measure their reaction times. Using an included con
 3. The program currently supports only Windows and has only been tested on Windows 11 Systems. Linux users may be able to achieve full functionality through compatibility layers like WINE.
 
 # Background Info
-Most of my programming background is in embedded systems, and I've never created a win32 application before. So, I decided to use GPT-4 (via ChatGPT) to assist with the development. While it handled most of the heavy lifting, I've made the overarching design choices as well as some manual tweaks of my own.
+Most of my programming background is in (relatively simple) embedded systems, and I've never created a win32 application before. So, I decided to use GPT-4 (via ChatGPT) to assist with the development. While it handled most of the heavy lifting, I've made the overarching design choices as well as some manual tweaks of my own. As development has gone on I have been taking on more of the actual coding work, while using GPT-4 to deal with menial tasks.
