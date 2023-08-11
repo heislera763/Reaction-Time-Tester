@@ -68,7 +68,7 @@ void LoadTextColorConfiguration(const wchar_t* cfgPath);
 void AllocateMemoryForReactionTimes();
 void LoadConfig();
 void InitializeLogFileName(int x);
-bool AppendToLog(double x, int y, wchar_t* log_file, wchar_t* external_error_message);
+bool AppendToLog(double reaction_time_value, int trial_number, wchar_t* log_file, wchar_t* external_error_message);
 
 // Input handling functions
 bool RegisterForRawInput(HWND hwnd, USHORT usage);
@@ -629,7 +629,7 @@ void InitializeLogFileName(int x) { // Initialize a log file name, 0 = trial log
 
 }
 
-bool AppendToLog(double x, int y, wchar_t* logfile, wchar_t* external_error_message) {  // Handles log file operations
+bool AppendToLog(double reaction_time_value, int trial_number, wchar_t* logfile, wchar_t* external_error_message) {  // Handles log file operations
     wchar_t exe_path[MAX_PATH];
     wchar_t log_file_path[MAX_PATH];
     wchar_t log_dir_path[MAX_PATH];  // Added for the directory path
@@ -663,12 +663,12 @@ bool AppendToLog(double x, int y, wchar_t* logfile, wchar_t* external_error_mess
                 _wcserror_s(error_message, sizeof(error_message) / sizeof(wchar_t), err);
                 HandleError(error_message);
             } else 
-            if (x == 0 && y == 0) {
+            if (reaction_time_value == 0 && trial_number == 0) { // Don't know if I like this check but reaction_time_value = 0 && trial_number = 0 shouldn't be possible unless the values are forced, so it works fine
                 fwprintf(log_file, L"ERROR: %s\n", external_error_message); // Note: This only logs errors after we have already loaded the config
                 fclose(log_file);
                 return true;
             } else if (trial_logging_enabled) {
-                fwprintf(log_file, L"Trial %d: %f\n", y, x);
+                fwprintf(log_file, L"Trial %d: %f\n", trial_number, reaction_time_value);
                 fclose(log_file);
                 return true;
                     {
