@@ -73,7 +73,7 @@ bool AppendToLog(double reaction_time_value, int trial_number, wchar_t* log_file
 
 // Input handling functions
 bool RegisterForRawInput(HWND hwnd, USHORT usage);
-void HandleInput(HWND hwnd, bool x);
+void HandleInput(HWND hwnd, bool is_mouse_input);
 void HandleGenericKeyboardInput(HWND hwnd);
 void HandleRawKeyboardInput(RAWINPUT* raw, HWND hwnd);
 void HandleGenericMouseInput(HWND hwnd);
@@ -695,8 +695,8 @@ bool RegisterForRawInput(HWND hwnd, USHORT usage) {
     return true;
 }
 
-void HandleInput(HWND hwnd, bool IsMouse) {   // Primary "game" logic is done here.
-    if ((!Input_Enabled.Mouse && IsMouse) || (!Input_Enabled.Keyboard && !IsMouse)) {
+void HandleInput(HWND hwnd, bool is_mouse_input) {   // Primary "game" logic is done here.
+    if ((!Input_Enabled.Mouse && is_mouse_input) || (!Input_Enabled.Keyboard && !is_mouse_input)) {
         return;  // Don't process the input if device is currently blocked
     }
     if (Current_State == STATE_REACT) {
@@ -733,35 +733,35 @@ void HandleRawKeyboardInput(RAWINPUT* raw, HWND hwnd) {
 
     if (raw->data.keyboard.Flags == RI_KEY_MAKE && IsAlphanumeric(vkey) && !key_states[vkey]) {
         HandleInput(hwnd, false);
-        key_states[vkey] = 1; // Latch the key state
+        key_states[vkey] = true; // Latch the key state
     }
     else if (raw->data.keyboard.Flags == RI_KEY_BREAK) {
-        key_states[vkey] = 0; // Unlatch on key release
+        key_states[vkey] = false; // Unlatch on key release
     }
 }
 
 void HandleGenericMouseInput(HWND hwnd) {
-    static int was_button_pressed = 0; // 0: not pressed, 1: pressed
-    int is_button_pressed = GetAsyncKeyState(VK_LBUTTON) & 0x8000;
+    static bool was_button_pressed = false; // 0: not pressed, 1: pressed
+    bool is_button_pressed = GetAsyncKeyState(VK_LBUTTON) & 0x8000;
 
     if (is_button_pressed && !was_button_pressed) { // Check for transition from up to down
         HandleInput(hwnd, true);
-        was_button_pressed = 1; // Latch the button state
+        was_button_pressed = true; // Latch the button state
     }
     else if (!is_button_pressed && was_button_pressed) { // Check for transition from down to up
-        was_button_pressed = 0; // Unlatch immediately on button release
+        was_button_pressed = false; // Unlatch immediately on button release
     }
 }
 
 void HandleRawMouseInput(RAWINPUT* raw, HWND hwnd) {
-    static int was_button_pressed = 0; // 0: not pressed, 1: pressed
+    static bool was_button_pressed = false; // 0: not pressed, 1: pressed
 
     if (raw->data.mouse.usButtonFlags & RI_MOUSE_LEFT_BUTTON_DOWN && !was_button_pressed) {
         HandleInput(hwnd, true);
-        was_button_pressed = 1; // Latch the button state
+        was_button_pressed = true; // Latch the button state
     }
     else if (raw->data.mouse.usButtonFlags & RI_MOUSE_LEFT_BUTTON_UP && was_button_pressed) {
-        was_button_pressed = 0; // Unlatch immediately on button release
+        was_button_pressed = false; // Unlatch immediately on button release
     }
 }
 
