@@ -318,7 +318,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 swprintf_s(buffer, 100, L"Last: %.2lfms\nAverage (last %d): %.2lfms\nTrials so far: %d", reaction_times[(current_attempt - 1) % number_of_trials], number_of_trials, average, total_trial_number);
             }
             if (trial_logging_enabled == 1) AppendToLog(reaction_times[(current_attempt - 1 + number_of_trials) % number_of_trials], total_trial_number, trial_log_file_name);
-            if (debug_logging_enabled == 1) AppendToLog(1, 1, debug_log_file_name);
+            if (debug_logging_enabled == 1) AppendToLog(0, 0, debug_log_file_name);
         }
         else if (Current_State == STATE_EARLY) {
             SetTextColor(hdc, RGB(early_font_color[0], early_font_color[1], early_font_color[2]));
@@ -671,17 +671,16 @@ bool AppendToLog(double x, int y, wchar_t* logfile) {  // Handles log file opera
                 wchar_t error_message[512];
                 _wcserror_s(error_message, sizeof(error_message) / sizeof(wchar_t), err);
                 HandleError(error_message);
-            }
-            else {
-                if (trial_logging_enabled) {
+            } else 
+            if (x == 0 && y == 0) {
+                fwprintf(log_file, L"Nothing to log right now... (This is an unfinished dev tool)\n"); // Print debug info here
+                fclose(log_file);
+                return true;
+                } else if (trial_logging_enabled) {
                     fwprintf(log_file, L"Trial %d: %f\n", y, x);
                     fclose(log_file);
                     return true;
-                }
-                if (debug_logging_enabled) {
-                    fwprintf(log_file, L"Nothing to right now\n"); // Print debug info here
-                    fclose(log_file);
-                    return true;
+                    {
                 }
             }
         }
