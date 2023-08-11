@@ -617,22 +617,22 @@ void LoadConfig() {
 void InitializeLogFileName(int x) { // Initialize a log file name, 0 = trial log, 1 = debug log (Might make this better later)
     time_t t;
     struct tm* tmp;
-
+    
     time(&t);
     struct tm local_time;
     localtime_s(&local_time, &t);
     tmp = &local_time;
 
     wchar_t timestamp[20];
+    int timestamp_length = sizeof(timestamp)/sizeof(wchar_t);
 
     if (x) {
-        wcsftime(timestamp, sizeof(timestamp), L"%Y%m%d%H%M%S", tmp);  // Format YYYYMMDDHHMMSS
+        wcsftime(timestamp, timestamp_length, L"%Y%m%d%H%M%S", tmp);  // Format YYYYMMDDHHMMSS
         swprintf_s(debug_log_file_name, MAX_PATH, L"log\\DEBUG_Log_%s.log", timestamp);
     }else{
-        wcsftime(timestamp, sizeof(timestamp), L"%Y%m%d%H%M%S", tmp);  // Format YYYYMMDDHHMMSS
+        wcsftime(timestamp, timestamp_length, L"%Y%m%d%H%M%S", tmp);  // Format YYYYMMDDHHMMSS
         swprintf_s(trial_log_file_name, MAX_PATH, L"log\\Log_%s.log", timestamp);
     }
-
 
 }
 
