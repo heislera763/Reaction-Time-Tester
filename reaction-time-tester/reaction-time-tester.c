@@ -43,16 +43,18 @@ typedef enum { // Define states
     STATE_RESULT
 } ProgramState;
 ProgramState Current_State = STATE_READY; // Initial state
-double* reaction_times = NULL; // Array to store the last 5 reaction times.
-int current_attempt = 0;
-int total_trial_number = 0;
-int key_states[MAX_KEYS] = { 0 }; // 0: not pressed, 1: pressed
-LARGE_INTEGER start_time, end_time, frequency; // For high-resolution timing
+
 typedef struct { // Struct for determining whether an input is allowable
     bool Mouse;
     bool Keyboard;
 } InputState;
 InputState Input_Enabled = { true, true }; // Input allowed or not
+
+int current_attempt = 0;
+int total_trial_number = 0;
+int key_states[MAX_KEYS] = { 0 }; // 0: not pressed, 1: pressed
+double* reaction_times = NULL; // Array to store the last 5 reaction times.
+LARGE_INTEGER start_time, end_time, frequency; // For high-resolution timing
 bool debounce_active = false; // This is a global indicator for whether or not program is halting inputs for Virtual Debounce feature
 
 // UI and Rendering
@@ -525,7 +527,7 @@ bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength) { // Initia
     return true;
 }
 
-void LoadColorConfiguration(const wchar_t* cfgPath, const wchar_t* sectionName, const wchar_t* colorName, COLORREF* targetColorArray) {
+void LoadColorConfiguration(const wchar_t* cfgPath, const wchar_t* sectionName, const wchar_t* colorName, COLORREF* targetColorArray) { // Load RGB from config file
     wchar_t buffer[255];
     GetPrivateProfileString(sectionName, colorName, L"", buffer, sizeof(buffer) / sizeof(wchar_t), cfgPath);  // Retrieve color configuration as comma-separated RGB values
 
