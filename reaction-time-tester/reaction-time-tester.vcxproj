@@ -22,6 +22,7 @@
     <ClCompile Include="reaction-time-tester.c" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="default_settings.h" />
     <ClInclude Include="resource.h" />
   </ItemGroup>
   <ItemGroup>
