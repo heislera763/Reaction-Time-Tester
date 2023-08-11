@@ -14,8 +14,8 @@
 // Configuration and Settings
 COLORREF ready_color[3], react_color[3], early_color[3], result_color[3], early_font_color[3], results_font_color[3];
 int min_delay, max_delay, number_of_trials, early_reset_delay, virtual_debounce, raw_keyboard_enabled, raw_mouse_enabled, raw_input_debug, trial_logging_enabled, debug_logging_enabled;
-wchar_t trial_log_file_name[MAX_PATH]; // Log file name global for ease
-wchar_t debug_log_file_name[MAX_PATH]; // Log file name global for ease
+wchar_t trial_log_file_name[MAX_PATH];
+wchar_t debug_log_file_name[MAX_PATH];
 wchar_t font_name[MAX_PATH];
 wchar_t font_style[MAX_PATH];
 int font_size;
@@ -35,7 +35,7 @@ typedef struct { // Struct for determining whether an input is allowable
     bool Mouse;
     bool Keyboard;
 } InputState;
-InputState Input_Enabled = { true, true }; // Input allowed or not
+InputState Input_Enabled = { true, true };
 
 int current_attempt = 0;
 int total_trial_number = 0;
@@ -462,7 +462,7 @@ int GenerateRandomDelay(int min, int max) { // Generate a random number in range
     return min + (r / buckets);
 }
 
-void BrushCleanup() { // Hardcoded to delete only these brushes, should probably replace with a more modular approach...
+void BrushCleanup() { // Hardcoded to delete only these brushes, should probably replace with a more modular approach. Also, are these conditionals needed?
     if (hReadyBrush) DeleteObject(hReadyBrush);
     if (hReactBrush) DeleteObject(hReactBrush);
     if (hEarlyBrush) DeleteObject(hEarlyBrush);
