@@ -27,8 +27,9 @@
 
 // Configuration and Settings
 COLORREF ready_color[3], react_color[3], early_color[3], result_color[3], early_font_color[3], results_font_color[3];
-int min_delay, max_delay, number_of_trials, early_reset_delay, virtual_debounce, raw_keyboard_enabled, raw_mouse_enabled, raw_input_debug, trial_logging_enabled;
-wchar_t log_file_name[MAX_PATH]; // Log file name global for ease
+int min_delay, max_delay, number_of_trials, early_reset_delay, virtual_debounce, raw_keyboard_enabled, raw_mouse_enabled, raw_input_debug, trial_logging_enabled, debug_logging_enabled;
+wchar_t trial_log_file_name[MAX_PATH]; // Log file name global for ease
+wchar_t debug_log_file_name[MAX_PATH]; // Log file name global for ease
 wchar_t font_name[MAX_PATH];
 wchar_t font_style[MAX_PATH];
 int font_size;
@@ -80,8 +81,8 @@ void LoadTrialConfiguration(const wchar_t* cfgPath);
 void LoadTextColorConfiguration(const wchar_t* cfgPath);
 void AllocateMemoryForReactionTimes();
 void LoadConfig();
-void InitializeLogFileName();
-bool AppendToLog(double x, int y);
+void InitializeLogFileName(int x);
+bool AppendToLog(double x, int y, wchar_t* log_file);
 
 // Input handling functions
 bool RegisterForRawInput(HWND hwnd, USHORT usage);
@@ -120,7 +121,8 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     // Initialize brushes for painting.
     LoadConfig(); // Load configuration at the start
 
-    if (trial_logging_enabled==1) InitializeLogFileName();
+    if (trial_logging_enabled == 1) InitializeLogFileName(0);
+    if (debug_logging_enabled == 1) InitializeLogFileName(1);
 
     // Get the dimensions of the main display
     int screen_width = GetSystemMetrics(SM_CXSCREEN);
@@ -315,7 +317,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 double average = total / number_of_trials;
                 swprintf_s(buffer, 100, L"Last: %.2lfms\nAverage (last %d): %.2lfms\nTrials so far: %d", reaction_times[(current_attempt - 1) % number_of_trials], number_of_trials, average, total_trial_number);
             }
-            if (trial_logging_enabled==1) AppendToLog(reaction_times[(current_attempt - 1 + number_of_trials) % number_of_trials], total_trial_number);
+            if (trial_logging_enabled == 1) AppendToLog(reaction_times[(current_attempt - 1 + number_of_trials) % number_of_trials], total_trial_number, trial_log_file_name);
+            if (debug_logging_enabled == 1) AppendToLog(1, 1, debug_log_file_name);
         }
         else if (Current_State == STATE_EARLY) {
             SetTextColor(hdc, RGB(early_font_color[0], early_font_color[1], early_font_color[2]));
@@ -445,11 +448,9 @@ void ValidateConfigSetting() { // Dumping ground for validating settings. There 
     if ((raw_keyboard_enabled != 0 && raw_keyboard_enabled != 1) || (raw_mouse_enabled != 0 && raw_mouse_enabled != 1) || raw_input_debug != 0 && raw_input_debug != 1) {
         HandleError(L"Invalid raw input settings in reaction.cfg");
     }
-    if (trial_logging_enabled != 0 && trial_logging_enabled != 1) {
+    if ((trial_logging_enabled != 0 && trial_logging_enabled != 1)|| (debug_logging_enabled != 0 && debug_logging_enabled != 1)) {
         HandleError(L"Invalid raw input settings in reaction.cfg");
     }
-
-
 }
 
 void RemoveComment(wchar_t* str) { // Removes comments and trailing spaces from strings read from .cfg files
@@ -604,6 +605,7 @@ void LoadConfig() {
     raw_mouse_enabled = GetPrivateProfileInt(L"Toggles", L"RawMouseEnabled", DEFAULT_RAWMOUSEENABLE, cfg_path);
     raw_input_debug = GetPrivateProfileInt(L"Toggles", L"RawInputDebug", 0, cfg_path);
     trial_logging_enabled = GetPrivateProfileInt(L"Toggles", L"TrialLoggingEnabled", 0, cfg_path);
+    debug_logging_enabled = GetPrivateProfileInt(L"Toggles", L"DebugLoggingEnabled", 0, cfg_path);
 
     ValidateConfigSetting(); // Reminder: This is hardcoded to check for invalid settings, you must add those checks to the function directly (for now)
 
@@ -614,7 +616,7 @@ void LoadConfig() {
     AllocateMemoryForReactionTimes();
 }
 
-void InitializeLogFileName() {
+void InitializeLogFileName(int x) { // Initialize a log file name, 0 = trial log, 1 = debug log (Might make this better later)
     time_t t;
     struct tm* tmp;
 
@@ -624,12 +626,19 @@ void InitializeLogFileName() {
     tmp = &local_time;
 
     wchar_t timestamp[TIME_BUFFER_SIZE];
-    wcsftime(timestamp, TIME_BUFFER_SIZE, L"%Y%m%d%H%M%S", tmp);  // Format YYYYMMDDHHMMSS
 
-    swprintf_s(log_file_name, MAX_PATH, L"log\\Log_%s.log", timestamp);
+    if (x) {
+        wcsftime(timestamp, TIME_BUFFER_SIZE, L"%Y%m%d%H%M%S", tmp);  // Format YYYYMMDDHHMMSS
+        swprintf_s(debug_log_file_name, MAX_PATH, L"log\\DEBUG_Log_%s.log", timestamp);
+    }else{
+        wcsftime(timestamp, TIME_BUFFER_SIZE, L"%Y%m%d%H%M%S", tmp);  // Format YYYYMMDDHHMMSS
+        swprintf_s(trial_log_file_name, MAX_PATH, L"log\\Log_%s.log", timestamp);
+    }
+
+
 }
 
-bool AppendToLog(double x, int y) {  // Handles log file operations
+bool AppendToLog(double x, int y, wchar_t* logfile) {  // Handles log file operations
     wchar_t exe_path[MAX_PATH];
     wchar_t log_file_path[MAX_PATH];
     wchar_t log_dir_path[MAX_PATH];  // Added for the directory path
@@ -653,7 +662,7 @@ bool AppendToLog(double x, int y) {  // Handles log file operations
         }
         else {
             // Create full path for the log file
-            swprintf_s(log_file_path, MAX_PATH, L"%s%s", exe_path, log_file_name);
+            swprintf_s(log_file_path, MAX_PATH, L"%s%s", exe_path, logfile);
 
             // Append to the log file
             FILE* log_file;
@@ -664,9 +673,16 @@ bool AppendToLog(double x, int y) {  // Handles log file operations
                 HandleError(error_message);
             }
             else {
-                fwprintf(log_file, L"Trial %d: %f\n", y, x);
-                fclose(log_file);
-                return true;
+                if (trial_logging_enabled) {
+                    fwprintf(log_file, L"Trial %d: %f\n", y, x);
+                    fclose(log_file);
+                    return true;
+                }
+                if (debug_logging_enabled) {
+                    fwprintf(log_file, L"Nothing to right now\n"); // Print debug info here
+                    fclose(log_file);
+                    return true;
+                }
             }
         }
     }
