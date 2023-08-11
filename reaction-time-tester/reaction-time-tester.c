@@ -796,7 +796,7 @@ void ResetLogic(HWND hwnd) {
     KillTimer(hwnd, TIMER_READY);
     KillTimer(hwnd, TIMER_REACT);
     KillTimer(hwnd, TIMER_EARLY);
-    KillTimer(hwnd, TIMER_DEBOUNCE); // Not clear if this is needed right now
+    // KillTimer(hwnd, TIMER_DEBOUNCE); // Keeping this commented out for now
 
     Current_State = STATE_READY;
    
@@ -824,7 +824,7 @@ void HandleEarlyClick(HWND hwnd) {
     InvalidateRect(hwnd, NULL, TRUE);
 }
 
-void ResetAll(HWND hwnd) { // This isn't used and I don't recall what the purpose would have been anyways...
+void ResetAll(HWND hwnd) { // This isn't used but I guess it could be used to manually reset attempts, might break logging though
     current_attempt = 0;
     for (int i = 0; i < number_of_trials; i++) {
         reaction_times[i] = 0;
