@@ -75,7 +75,7 @@ void BrushCleanup();
 
 // Configuration and setup functions
 bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength);
-void LoadColorConfiguration(const wchar_t* cfgPath, const wchar_t* sectionName, const wchar_t* colorName, COLORREF* targetColorArray);
+void LoadColorConfiguration(const wchar_t* cfgPath, const wchar_t* sectionName, const wchar_t* colorName, const COLORREF* targetColorArray);
 void LoadFontConfiguration(const wchar_t* cfgPath, wchar_t* targetFontName, size_t maxLength, int* fontSize, wchar_t* fontStyle, size_t fontStyleLength);
 void LoadTrialConfiguration(const wchar_t* cfgPath);
 void LoadTextColorConfiguration(const wchar_t* cfgPath);
@@ -92,7 +92,7 @@ void HandleRawKeyboardInput(RAWINPUT* raw, HWND hwnd);
 void HandleGenericMouseInput(HWND hwnd);
 void HandleRawMouseInput(RAWINPUT* raw, HWND hwnd);
 bool IsAlphanumeric(int vkey);
-void UpdateKeyState(int vk, HWND hwnd);
+void UpdateKeyState(int vkey, HWND hwnd);
 
 // Main application logic functions
 void ResetLogic(HWND hwnd);
@@ -528,7 +528,7 @@ bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength) { // Initia
     return true;
 }
 
-void LoadColorConfiguration(const wchar_t* cfgPath, const wchar_t* sectionName, const wchar_t* colorName, COLORREF* targetColorArray) { // Load RGB from config file
+void LoadColorConfiguration(const wchar_t* cfgPath, const wchar_t* sectionName, const wchar_t* colorName, const COLORREF* targetColorArray) { // Load RGB from config file
     wchar_t buffer[255];
     GetPrivateProfileString(sectionName, colorName, L"", buffer, sizeof(buffer) / sizeof(wchar_t), cfgPath);  // Retrieve color configuration as comma-separated RGB values
 
@@ -731,8 +731,8 @@ void HandleInput(HWND hwnd, bool x) {   // Primary "game" logic is done here. x 
 }
 
 void HandleGenericKeyboardInput(HWND hwnd) {
-    for (int vk = 0; vk <= 255; vk++) { // loop through all possible VK values
-        UpdateKeyState(vk, hwnd);
+    for (int vkey = 0; vkey <= 255; vkey++) { // loop through all possible VK values
+        UpdateKeyState(vkey, hwnd);
     }
 }
 
@@ -778,15 +778,15 @@ bool IsAlphanumeric(int vkey) {
         (vkey >= 'A' && vkey <= 'Z');   // 'A' to 'Z'
 }
 
-void UpdateKeyState(int vk, HWND hwnd) {
-    if (IsAlphanumeric(vk)) {
-        bool is_key_pressed = GetAsyncKeyState(vk) & 0x8000;
-        if (is_key_pressed && !key_states[vk]) {
+void UpdateKeyState(int vkey, HWND hwnd) {
+    if (IsAlphanumeric(vkey)) {
+        bool is_key_pressed = GetAsyncKeyState(vkey) & 0x8000;
+        if (is_key_pressed && !key_states[vkey]) {
             HandleInput(hwnd, 0);
-            key_states[vk] = 1; // Latch the key state
+            key_states[vkey] = 1; // Latch the key state
         }
-        else if (!is_key_pressed && key_states[vk]) {
-            key_states[vk] = 0; // Unlatch on key release
+        else if (!is_key_pressed && key_states[vkey]) {
+            key_states[vkey] = 0; // Unlatch on key release
         }
     }
 }
