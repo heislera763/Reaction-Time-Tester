@@ -17,8 +17,6 @@
 #define DEFAULT_FONT_STYLE L"Regular"
 #define DEFAULT_RESOLUTION_WIDTH 1280
 #define DEFAULT_RESOLUTION_HEIGHT 720
-#define TIME_BUFFER_SIZE 20
-#define MAX_KEYS 256
 #define TIMER_READY 1
 #define TIMER_REACT 2
 #define TIMER_EARLY 3
@@ -53,7 +51,7 @@ InputState Input_Enabled = { true, true }; // Input allowed or not
 
 int current_attempt = 0;
 int total_trial_number = 0;
-int key_states[MAX_KEYS] = { 0 }; // 0: not pressed, 1: pressed
+int key_states[256] = { 0 }; // 0: not pressed, 1: pressed
 double* reaction_times = NULL; // Array to store the last 5 reaction times.
 LARGE_INTEGER start_time, end_time, frequency; // For high-resolution timing
 bool debounce_active = false; // This is a global indicator for whether or not program is halting inputs for Virtual Debounce feature
@@ -625,13 +623,13 @@ void InitializeLogFileName(int x) { // Initialize a log file name, 0 = trial log
     localtime_s(&local_time, &t);
     tmp = &local_time;
 
-    wchar_t timestamp[TIME_BUFFER_SIZE];
+    wchar_t timestamp[20];
 
     if (x) {
-        wcsftime(timestamp, TIME_BUFFER_SIZE, L"%Y%m%d%H%M%S", tmp);  // Format YYYYMMDDHHMMSS
+        wcsftime(timestamp, sizeof(timestamp), L"%Y%m%d%H%M%S", tmp);  // Format YYYYMMDDHHMMSS
         swprintf_s(debug_log_file_name, MAX_PATH, L"log\\DEBUG_Log_%s.log", timestamp);
     }else{
-        wcsftime(timestamp, TIME_BUFFER_SIZE, L"%Y%m%d%H%M%S", tmp);  // Format YYYYMMDDHHMMSS
+        wcsftime(timestamp, sizeof(timestamp), L"%Y%m%d%H%M%S", tmp);  // Format YYYYMMDDHHMMSS
         swprintf_s(trial_log_file_name, MAX_PATH, L"log\\Log_%s.log", timestamp);
     }
 
