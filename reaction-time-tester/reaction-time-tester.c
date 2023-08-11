@@ -134,7 +134,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     );
 
     // Raw input
-    if (raw_keyboard_enabled == 1) RegisterForRawInput(hwnd, 0x02); // Attempt to Register Keyboard
+    if (raw_keyboard_enabled == 1) RegisterForRawInput(hwnd, 0x06); // Attempt to Register Keyboard
     if (raw_mouse_enabled == 1) RegisterForRawInput(hwnd, 0x02); // Attempt to Register Mouse
 
     if (raw_input_debug == 1) {
