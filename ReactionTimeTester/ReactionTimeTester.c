@@ -13,7 +13,8 @@
 
 // Configuration and Settings
 COLORREF ready_color[3], react_color[3], early_color[3], result_color[3], early_font_color[3], results_font_color[3];
-int min_delay, max_delay, number_of_trials, early_reset_delay, virtual_debounce, raw_keyboard_enabled, raw_mouse_enabled, raw_input_debug, trial_logging_enabled, debug_logging_enabled;
+int min_delay, max_delay, number_of_trials, early_reset_delay, virtual_debounce;
+bool raw_keyboard_enabled, raw_mouse_enabled, raw_input_debug_enabled, trial_logging_enabled, debug_logging_enabled;
 wchar_t trial_log_file_name[MAX_PATH];
 wchar_t debug_log_file_name[MAX_PATH];
 wchar_t font_name[MAX_PATH];
@@ -67,7 +68,7 @@ void LoadTrialConfiguration(const wchar_t* cfgPath);
 void LoadTextColorConfiguration(const wchar_t* cfgPath);
 void AllocateMemoryForReactionTimes();
 void LoadConfig();
-void InitializeLogFileName(int x);
+void InitializeLogFileName(int log_type);
 bool AppendToLog(double reaction_time_value, int trial_number, wchar_t* log_file, wchar_t* external_error_message);
 
 // Input handling functions
@@ -107,8 +108,8 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     // Initialize brushes for painting.
     LoadConfig(); // Load configuration at the start
 
-    if (trial_logging_enabled == 1) InitializeLogFileName(0);
-    if (debug_logging_enabled == 1) InitializeLogFileName(1);
+    if (trial_logging_enabled == true) InitializeLogFileName(0);
+    if (debug_logging_enabled == true) InitializeLogFileName(1);
 
     // Get the dimensions of the main display
     int screen_width = GetSystemMetrics(SM_CXSCREEN);
@@ -134,10 +135,10 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     );
 
     // Raw input
-    if (raw_keyboard_enabled == 1) RegisterForRawInput(hwnd, 0x06); // Attempt to Register Keyboard
-    if (raw_mouse_enabled == 1) RegisterForRawInput(hwnd, 0x02); // Attempt to Register Mouse
+    if (raw_keyboard_enabled == true) RegisterForRawInput(hwnd, 0x06); // Attempt to Register Keyboard
+    if (raw_mouse_enabled == true) RegisterForRawInput(hwnd, 0x02); // Attempt to Register Mouse
 
-    if (raw_input_debug == 1) {
+    if (raw_input_debug_enabled == true) {
         wchar_t message[256];
         swprintf(message, sizeof(message) / sizeof(wchar_t), L"RawKeyboardEnable: %d\nRawMouseEnable: %d\nRegisterForRawKeyboardInput: %s\nRegisterForRawMouseInput: %s", raw_keyboard_enabled, raw_mouse_enabled, RegisterForRawInput(hwnd, 0x06) ? L"True" : L"False", RegisterForRawInput(hwnd, 0x02) ? L"True" : L"False");
         MessageBox(NULL, message, L"Raw Input Variables", MB_OK);
@@ -366,10 +367,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
         RAWINPUT* raw = (RAWINPUT*)lpb;
 
-        if (raw->header.dwType == RIM_TYPEKEYBOARD && raw_keyboard_enabled == 1) { // Handle raw keyboard inputs
+        if (raw->header.dwType == RIM_TYPEKEYBOARD && raw_keyboard_enabled == true) { // Handle raw keyboard inputs
             HandleRawKeyboardInput(raw, hwnd);
         }
-        else if (raw->header.dwType == RIM_TYPEMOUSE && raw_mouse_enabled == 1) { // Handle raw mouse inputs
+        else if (raw->header.dwType == RIM_TYPEMOUSE && raw_mouse_enabled == true) { // Handle raw mouse inputs
             HandleRawMouseInput(raw, hwnd);
         }
 
@@ -380,7 +381,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     // Handle generic keyboard input:
     case WM_KEYDOWN:
     case WM_KEYUP:
-        if (raw_keyboard_enabled == 0) {
+        if (raw_keyboard_enabled == false) {
             HandleGenericKeyboardInput(hwnd);
         }
         break;
@@ -388,7 +389,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     // Handle generic mouse input:
     case WM_LBUTTONDOWN:
     case WM_LBUTTONUP:
-        if (raw_mouse_enabled == 0) {
+        if (raw_mouse_enabled == false) {
             HandleGenericMouseInput(hwnd);
         }
         break;
@@ -428,10 +429,10 @@ void ValidateConfigSetting() { // Dumping ground for validating settings. There 
     if (min_delay <= 0 || max_delay <= 0 || max_delay < min_delay || virtual_debounce < 0 || early_reset_delay <= 0) {
         HandleError(L"Invalid delay values in reaction.cfg");
     }
-    if ((raw_keyboard_enabled != 0 && raw_keyboard_enabled != 1) || (raw_mouse_enabled != 0 && raw_mouse_enabled != 1) || raw_input_debug != 0 && raw_input_debug != 1) {
+    if ((raw_keyboard_enabled != false && raw_keyboard_enabled != true) || (raw_mouse_enabled != false && raw_mouse_enabled != true) || raw_input_debug_enabled != false && raw_input_debug_enabled != true) {
         HandleError(L"Invalid raw input settings in reaction.cfg");
     }
-    if ((trial_logging_enabled != 0 && trial_logging_enabled != 1)|| (debug_logging_enabled != 0 && debug_logging_enabled != 1)) {
+    if ((trial_logging_enabled != false && trial_logging_enabled != true)|| (debug_logging_enabled != false && debug_logging_enabled != true)) {
         HandleError(L"Invalid raw input settings in reaction.cfg");
     }
 }
@@ -594,7 +595,7 @@ void LoadConfig() {
 
     raw_keyboard_enabled = GetPrivateProfileInt(L"Toggles", L"RawKeyboardEnabled", DEFAULT_RAWKEYBOARDENABLE, cfg_path);
     raw_mouse_enabled = GetPrivateProfileInt(L"Toggles", L"RawMouseEnabled", DEFAULT_RAWMOUSEENABLE, cfg_path);
-    raw_input_debug = GetPrivateProfileInt(L"Toggles", L"RawInputDebug", 0, cfg_path);
+    raw_input_debug_enabled = GetPrivateProfileInt(L"Toggles", L"RawInputDebug", 0, cfg_path);
     trial_logging_enabled = GetPrivateProfileInt(L"Toggles", L"TrialLoggingEnabled", 0, cfg_path);
     debug_logging_enabled = GetPrivateProfileInt(L"Toggles", L"DebugLoggingEnabled", 0, cfg_path);
 
@@ -607,7 +608,7 @@ void LoadConfig() {
     AllocateMemoryForReactionTimes();
 }
 
-void InitializeLogFileName(int x) { // Initialize a log file name, 0 = trial log, 1 = debug log (Might make this better later)
+void InitializeLogFileName(int log_type) { // Initialize a log file name,log_type = 0 = trial log, log_type = 1 = debug log
     time_t t;
     struct tm* tmp;
     
@@ -619,7 +620,7 @@ void InitializeLogFileName(int x) { // Initialize a log file name, 0 = trial log
     wchar_t timestamp[20];
     int timestamp_length = sizeof(timestamp)/sizeof(wchar_t);
 
-    if (x) {
+    if (log_type) {
         wcsftime(timestamp, timestamp_length, L"%Y%m%d%H%M%S", tmp);  // Format YYYYMMDDHHMMSS
         swprintf_s(debug_log_file_name, MAX_PATH, L"log\\DEBUG_Log_%s.log", timestamp);
     }else{
