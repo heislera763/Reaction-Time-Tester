@@ -27,7 +27,7 @@
 
 // Configuration and Settings
 COLORREF ready_color[3], react_color[3], early_color[3], result_color[3], early_font_color[3], results_font_color[3];
-int min_delay, max_delay, number_of_trials, early_reset_delay, virtual_debounce, raw_keyboard_enabled, raw_mouse_enabled, raw_input_debug, log_enabled;
+int min_delay, max_delay, number_of_trials, early_reset_delay, virtual_debounce, raw_keyboard_enabled, raw_mouse_enabled, raw_input_debug, trial_logging_enabled;
 wchar_t log_file_name[MAX_PATH]; // Log file name global for ease
 wchar_t font_name[MAX_PATH];
 wchar_t font_style[MAX_PATH];
@@ -65,8 +65,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 // Utility functions
 void HandleError(const wchar_t* errorMessage);
 void ValidateColors(COLORREF color[]);
-void ValidateDelays();
-void ValidateResolution();
+void ValidateConfigSetting();
 void RemoveComment(wchar_t* str);
 int GenerateRandomDelay(int min, int max);
 void BrushCleanup();
@@ -84,7 +83,7 @@ bool AppendToLog(double x, int y);
 
 // Input handling functions
 bool RegisterForRawInput(HWND hwnd, USHORT usage);
-void HandleInput(HWND hwnd);
+void HandleInput(HWND hwnd, bool x);
 void HandleGenericKeyboardInput(HWND hwnd);
 void HandleRawKeyboardInput(RAWINPUT* raw, HWND hwnd);
 void HandleGenericMouseInput(HWND hwnd);
@@ -119,7 +118,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     // Initialize brushes for painting.
     LoadConfig(); // Load configuration at the start
 
-    if (log_enabled==1) InitializeLogFileName();
+    if (trial_logging_enabled==1) InitializeLogFileName();
 
     // Get the dimensions of the main display
     int screen_width = GetSystemMetrics(SM_CXSCREEN);
@@ -145,15 +144,12 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     );
 
     // Raw input
-    bool keyboard_registered = false;
-    bool mouse_registered = false;
-
-    if (raw_keyboard_enabled == 1) keyboard_registered = RegisterForRawInput(hwnd, 0x06); // Attempt to Register Keyboard
-    if (raw_mouse_enabled == 1) mouse_registered = RegisterForRawInput(hwnd, 0x02); // Attempt to Register Mouse
+    if (raw_keyboard_enabled == 1) RegisterForRawInput(hwnd, 0x02); // Attempt to Register Keyboard
+    if (raw_mouse_enabled == 1) RegisterForRawInput(hwnd, 0x02); // Attempt to Register Mouse
 
     if (raw_input_debug == 1) {
         wchar_t message[256];
-        swprintf(message, sizeof(message) / sizeof(wchar_t), L"RawKeyboardEnable: %d\nRawMouseEnable: %d\nRegisterForRawKeyboardInput: %s\nRegisterForRawMouseInput: %s", raw_keyboard_enabled, raw_mouse_enabled, keyboard_registered ? L"True" : L"False", mouse_registered ? L"True" : L"False");
+        swprintf(message, sizeof(message) / sizeof(wchar_t), L"RawKeyboardEnable: %d\nRawMouseEnable: %d\nRegisterForRawKeyboardInput: %s\nRegisterForRawMouseInput: %s", raw_keyboard_enabled, raw_mouse_enabled, RegisterForRawInput(hwnd, 0x06) ? L"True" : L"False", RegisterForRawInput(hwnd, 0x02) ? L"True" : L"False");
         MessageBox(NULL, message, L"Raw Input Variables", MB_OK);
     }
 
@@ -300,14 +296,14 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         SetTextColor(hdc, RGB(255, 255, 255)); // Default to white text.
         SelectObject(hdc, hFont);
 
-        wchar_t buf[100] = { 0 }; // Initialize buffer
+        wchar_t buffer[100] = { 0 }; // Initialize buffer
 
         if (Current_State == STATE_RESULT) {
             SetTextColor(hdc, RGB(results_font_color[0], results_font_color[1], results_font_color[2]));
             total_trial_number++;
 
             if (current_attempt < number_of_trials) {
-                swprintf_s(buf, 100, L"Last: %.2lfms\nComplete %d trials for average.\nTrials so far: %d", reaction_times[(current_attempt - 1 + number_of_trials) % number_of_trials], number_of_trials, total_trial_number);
+                swprintf_s(buffer, 100, L"Last: %.2lfms\nComplete %d trials for average.\nTrials so far: %d", reaction_times[(current_attempt - 1 + number_of_trials) % number_of_trials], number_of_trials, total_trial_number);
             }
             else {
                 double total = 0;
@@ -315,22 +311,22 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                     total += reaction_times[i];
                 }
                 double average = total / number_of_trials;
-                swprintf_s(buf, 100, L"Last: %.2lfms\nAverage (last %d): %.2lfms\nTrials so far: %d", reaction_times[(current_attempt - 1) % number_of_trials], number_of_trials, average, total_trial_number);
+                swprintf_s(buffer, 100, L"Last: %.2lfms\nAverage (last %d): %.2lfms\nTrials so far: %d", reaction_times[(current_attempt - 1) % number_of_trials], number_of_trials, average, total_trial_number);
             }
-            if (log_enabled==1) AppendToLog(reaction_times[(current_attempt - 1 + number_of_trials) % number_of_trials], total_trial_number);
+            if (trial_logging_enabled==1) AppendToLog(reaction_times[(current_attempt - 1 + number_of_trials) % number_of_trials], total_trial_number);
         }
         else if (Current_State == STATE_EARLY) {
             SetTextColor(hdc, RGB(early_font_color[0], early_font_color[1], early_font_color[2]));
-            swprintf_s(buf, 100, L"Too early!\nTrials so far: %d", total_trial_number);
+            swprintf_s(buffer, 100, L"Too early!\nTrials so far: %d", total_trial_number);
         }
 
         // Calculate rectangle for the text and display it.
         RECT text_rectangle;
         SetRectEmpty(&text_rectangle);
-        DrawText(hdc, buf, -1, &text_rectangle, DT_CALCRECT | DT_WORDBREAK);
+        DrawText(hdc, buffer, -1, &text_rectangle, DT_CALCRECT | DT_WORDBREAK);
         RECT centered_rectangle = rect;
         centered_rectangle.top += (rect.bottom - rect.top - (text_rectangle.bottom - text_rectangle.top)) / 2; // Text doesn't center vertically (Possibly due to newline not being accounted for?)
-        DrawText(hdc, buf, -1, &centered_rectangle, DT_CENTER | DT_WORDBREAK);
+        DrawText(hdc, buffer, -1, &centered_rectangle, DT_CENTER | DT_WORDBREAK);
 
         EndPaint(hwnd, &ps);
     } break;
@@ -428,25 +424,30 @@ void HandleError(const wchar_t* errorMessage) { // Generic error handler
     exit(1);
 }
 
-void ValidateColors(COLORREF color[]) {
+void ValidateColors(COLORREF color[]) { // This is usable in general applications
     for (int i = 0; i < 3; i++) {
         if (color[i] < 0 || color[i] > 255) {
-            HandleError(L"Invalid color values in the configuration!");
+            HandleError(L"Invalid color values in reaction.cfg");
             return;
         }
     }
 }
 
-void ValidateDelays() { // Check for validity of delay. Very single purpose, may want to rewrite for modularity/flexibility, maybe just check all of config settings
-    if (min_delay <= 0 || max_delay <= 0 || max_delay < min_delay || virtual_debounce < 0 || early_reset_delay <= 0) {
-        HandleError(L"Invalid delay values in the configuration!");
-    }
-}
-
-void ValidateResolution() { // Check for resolution size. Similar issue to other "validate" functions in that it is very single use. 
+void ValidateConfigSetting() { // Dumping ground for validating settings. There is probably a general purpose-ish way to do this but I can't be bothered right now
     if (resolution_width <= 0 || resolution_height <= 0) {
-        HandleError(L"Invalid resolution values in the configuration!");
+        HandleError(L"Invalid resolution values in reaction.cfg");
     }
+    if (min_delay <= 0 || max_delay <= 0 || max_delay < min_delay || virtual_debounce < 0 || early_reset_delay <= 0) {
+        HandleError(L"Invalid delay values in reaction.cfg");
+    }
+    if ((raw_keyboard_enabled != 0 && raw_keyboard_enabled != 1) || (raw_mouse_enabled != 0 && raw_mouse_enabled != 1) || raw_input_debug != 0 && raw_input_debug != 1) {
+        HandleError(L"Invalid raw input settings in reaction.cfg");
+    }
+    if (trial_logging_enabled != 0 && trial_logging_enabled != 1) {
+        HandleError(L"Invalid raw input settings in reaction.cfg");
+    }
+
+
 }
 
 void RemoveComment(wchar_t* str) { // Removes comments and trailing spaces from strings read from .cfg files
@@ -552,7 +553,7 @@ void LoadFontConfiguration(const wchar_t* cfgPath, wchar_t* targetFontName, size
 void LoadTrialConfiguration(const wchar_t* cfgPath) {
     number_of_trials = GetPrivateProfileInt(L"Trial", L"NumberOfTrials", DEFAULT_NUM_TRIALS, cfgPath);
     if (number_of_trials <= 0) {
-        HandleError(L"Invalid number of trials in the configuration!");
+        HandleError(L"Invalid number of trials in reaction.cfg");
     }
 }
 
@@ -581,7 +582,6 @@ void LoadConfig() {
 
     resolution_width = GetPrivateProfileInt(L"Resolution", L"ResolutionWidth", DEFAULT_RESOLUTION_WIDTH, cfg_path);
     resolution_height = GetPrivateProfileInt(L"Resolution", L"ResolutionHeight", DEFAULT_RESOLUTION_HEIGHT, cfg_path);
-    ValidateResolution();
 
     LoadColorConfiguration(cfg_path, L"Colors", L"ReadyColor", ready_color);
     LoadColorConfiguration(cfg_path, L"Colors", L"ReactColor", react_color);
@@ -597,13 +597,13 @@ void LoadConfig() {
     max_delay = GetPrivateProfileInt(L"Delays", L"MaxDelay", DEFAULT_MAX_DELAY, cfg_path);
     early_reset_delay = GetPrivateProfileInt(L"Delays", L"EarlyResetDelay", DEFAULT_EARLY_RESET_DELAY, cfg_path);
     virtual_debounce = GetPrivateProfileInt(L"Delays", L"VirtualDebounce", DEFAULT_VIRTUAL_DEBOUNCE, cfg_path);
-    ValidateDelays();
 
-    raw_keyboard_enabled = GetPrivateProfileInt(L"Toggles", L"RawKeyboardEnable", DEFAULT_RAWKEYBOARDENABLE, cfg_path);
-    raw_mouse_enabled = GetPrivateProfileInt(L"Toggles", L"RawMouseEnable", DEFAULT_RAWMOUSEENABLE, cfg_path);
-    raw_input_debug = GetPrivateProfileInt(L"Toggles", L"RawInputDebug", 0, cfg_path); // Debug => No macro wanted
+    raw_keyboard_enabled = GetPrivateProfileInt(L"Toggles", L"RawKeyboardEnabled", DEFAULT_RAWKEYBOARDENABLE, cfg_path);
+    raw_mouse_enabled = GetPrivateProfileInt(L"Toggles", L"RawMouseEnabled", DEFAULT_RAWMOUSEENABLE, cfg_path);
+    raw_input_debug = GetPrivateProfileInt(L"Toggles", L"RawInputDebug", 0, cfg_path);
+    trial_logging_enabled = GetPrivateProfileInt(L"Toggles", L"TrialLoggingEnabled", 0, cfg_path);
 
-    log_enabled = GetPrivateProfileInt(L"Toggles", L"LogEnable", 0, cfg_path);
+    ValidateConfigSetting(); // Reminder: This is hardcoded to check for invalid settings, you must add those checks to the function directly (for now)
 
     LoadTrialConfiguration(cfg_path);
     LoadTextColorConfiguration(cfg_path);
