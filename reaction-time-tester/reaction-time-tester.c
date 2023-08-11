@@ -11,7 +11,6 @@
 #define TIMER_EARLY 3
 #define TIMER_DEBOUNCE 4
 
-
 // Configuration and Settings
 COLORREF ready_color[3], react_color[3], early_color[3], result_color[3], early_font_color[3], results_font_color[3];
 int min_delay, max_delay, number_of_trials, early_reset_delay, virtual_debounce, raw_keyboard_enabled, raw_mouse_enabled, raw_input_debug, trial_logging_enabled, debug_logging_enabled;
@@ -246,7 +245,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         }
         return TRUE;
 
-
     case WM_PAINT: {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hwnd, &ps);
@@ -275,7 +273,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             HandleError(L"Invalid or undefined program state!");
             break;
         }
-
 
         // Paint the entire window with the selected brush.
         RECT rect;
@@ -322,7 +319,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
         EndPaint(hwnd, &ps);
     } break;
-
 
     case WM_TIMER:
         switch (wParam) {
@@ -453,9 +449,17 @@ void RemoveComment(wchar_t* str) { // Removes comments and trailing spaces from 
     }
 }
 
+int GenerateRandomDelay(int min, int max) { // Generate a random number in range min to max
+    int range = max - min + 1;
+    int buckets = RAND_MAX / range;
+    int limit = buckets * range;
 
-int GenerateRandomDelay(int min, int max) { // Generate a random delay given a min and max delay value
-    return rand() % (max - min + 1) + min;
+    int r;
+    do {
+        r = rand();
+    } while (r >= limit);
+
+    return min + (r / buckets);
 }
 
 void BrushCleanup() { // Hardcoded to delete only these brushes, should probably replace with a more modular approach...
