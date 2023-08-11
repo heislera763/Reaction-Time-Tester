@@ -68,7 +68,7 @@ void LoadTextColorConfiguration(const wchar_t* cfgPath);
 void AllocateMemoryForReactionTimes();
 void LoadConfig();
 void InitializeLogFileName(int x);
-bool AppendToLog(double x, int y, wchar_t* log_file);
+bool AppendToLog(double x, int y, wchar_t* log_file, wchar_t* external_error_message);
 
 // Input handling functions
 bool RegisterForRawInput(HWND hwnd, USHORT usage);
@@ -99,7 +99,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     wc.hInstance = hInstance;
     wc.lpszClassName = CLASS_NAME;
 
-    // Register the window class.
+      // Register the window class.
     if (!RegisterClass(&wc)) {
         HandleError(L"Failed to register window class");
     }
@@ -301,8 +301,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                 double average = total / number_of_trials;
                 swprintf_s(buffer, 100, L"Last: %.2lfms\nAverage (last %d): %.2lfms\nTrials so far: %d", reaction_times[(current_attempt - 1) % number_of_trials], number_of_trials, average, total_trial_number);
             }
-            if (trial_logging_enabled == 1) AppendToLog(reaction_times[(current_attempt - 1 + number_of_trials) % number_of_trials], total_trial_number, trial_log_file_name);
-            if (debug_logging_enabled == 1) AppendToLog(0, 0, debug_log_file_name);
+            if (trial_logging_enabled == 1) AppendToLog(reaction_times[(current_attempt - 1 + number_of_trials) % number_of_trials], total_trial_number, trial_log_file_name, NULL);
         }
         else if (Current_State == STATE_EARLY) {
             SetTextColor(hdc, RGB(early_font_color[0], early_font_color[1], early_font_color[2]));
@@ -407,8 +406,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
 
 // Utility Functions:
-void HandleError(const wchar_t* errorMessage) { // Generic error handler
-    MessageBox(NULL, errorMessage, L"Error", MB_OK);
+void HandleError(const wchar_t* error_message) { // Generic error handler
+    MessageBox(NULL, error_message, L"Error", MB_OK);
+    if (debug_logging_enabled == 1) AppendToLog(0, 0, debug_log_file_name, error_message);
     exit(1);
 }
 
@@ -629,7 +629,7 @@ void InitializeLogFileName(int x) { // Initialize a log file name, 0 = trial log
 
 }
 
-bool AppendToLog(double x, int y, wchar_t* logfile) {  // Handles log file operations
+bool AppendToLog(double x, int y, wchar_t* logfile, wchar_t* external_error_message) {  // Handles log file operations
     wchar_t exe_path[MAX_PATH];
     wchar_t log_file_path[MAX_PATH];
     wchar_t log_dir_path[MAX_PATH];  // Added for the directory path
@@ -664,13 +664,13 @@ bool AppendToLog(double x, int y, wchar_t* logfile) {  // Handles log file opera
                 HandleError(error_message);
             } else 
             if (x == 0 && y == 0) {
-                fwprintf(log_file, L"Nothing to log right now... (This is an unfinished dev tool)\n"); // Print debug info here
+                fwprintf(log_file, L"ERROR: %s\n", external_error_message); // Note: This only logs errors after we have already loaded the config
                 fclose(log_file);
                 return true;
-                } else if (trial_logging_enabled) {
-                    fwprintf(log_file, L"Trial %d: %f\n", y, x);
-                    fclose(log_file);
-                    return true;
+            } else if (trial_logging_enabled) {
+                fwprintf(log_file, L"Trial %d: %f\n", y, x);
+                fclose(log_file);
+                return true;
                     {
                 }
             }
