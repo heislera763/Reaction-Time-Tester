@@ -694,8 +694,8 @@ bool RegisterForRawInput(HWND hwnd, USHORT usage) {
     return true;
 }
 
-void HandleInput(HWND hwnd, bool x) {   // Primary "game" logic is done here. x variable to indicate the type of input device
-    if ((!Input_Enabled.Mouse && x) || (!Input_Enabled.Keyboard && !x)) {
+void HandleInput(HWND hwnd, bool IsMouse) {   // Primary "game" logic is done here.
+    if ((!Input_Enabled.Mouse && IsMouse) || (!Input_Enabled.Keyboard && !IsMouse)) {
         return;  // Don't process the input if device is currently blocked
     }
     if (Current_State == STATE_REACT) {
@@ -731,7 +731,7 @@ void HandleRawKeyboardInput(RAWINPUT* raw, HWND hwnd) {
     int vkey = raw->data.keyboard.VKey;
 
     if (raw->data.keyboard.Flags == RI_KEY_MAKE && IsAlphanumeric(vkey) && !key_states[vkey]) {
-        HandleInput(hwnd, 0);
+        HandleInput(hwnd, false);
         key_states[vkey] = 1; // Latch the key state
     }
     else if (raw->data.keyboard.Flags == RI_KEY_BREAK) {
@@ -744,7 +744,7 @@ void HandleGenericMouseInput(HWND hwnd) {
     int is_button_pressed = GetAsyncKeyState(VK_LBUTTON) & 0x8000;
 
     if (is_button_pressed && !was_button_pressed) { // Check for transition from up to down
-        HandleInput(hwnd, 1);
+        HandleInput(hwnd, true);
         was_button_pressed = 1; // Latch the button state
     }
     else if (!is_button_pressed && was_button_pressed) { // Check for transition from down to up
@@ -756,7 +756,7 @@ void HandleRawMouseInput(RAWINPUT* raw, HWND hwnd) {
     static int was_button_pressed = 0; // 0: not pressed, 1: pressed
 
     if (raw->data.mouse.usButtonFlags & RI_MOUSE_LEFT_BUTTON_DOWN && !was_button_pressed) {
-        HandleInput(hwnd, 1);
+        HandleInput(hwnd, true);
         was_button_pressed = 1; // Latch the button state
     }
     else if (raw->data.mouse.usButtonFlags & RI_MOUSE_LEFT_BUTTON_UP && was_button_pressed) {
@@ -773,7 +773,7 @@ void UpdateKeyState(int vkey, HWND hwnd) {
     if (IsAlphanumeric(vkey)) {
         bool is_key_pressed = GetAsyncKeyState(vkey) & 0x8000;
         if (is_key_pressed && !key_states[vkey]) {
-            HandleInput(hwnd, 0);
+            HandleInput(hwnd, false);
             key_states[vkey] = 1; // Latch the key state
         }
         else if (!is_key_pressed && key_states[vkey]) {
