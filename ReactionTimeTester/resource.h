@@ -1,6 +1,6 @@
 //{{NO_DEPENDENCIES}}
 // Microsoft Visual C++ generated include file.
-// Used by reaction-time-tester.rc
+// Used by ReactionTimeTester.rc
 //
 #define IDI_ICON1                       106
 

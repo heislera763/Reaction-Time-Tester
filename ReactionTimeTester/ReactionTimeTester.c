@@ -124,7 +124,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     HWND hwnd = CreateWindowEx(
         0,
         CLASS_NAME,
-        L"reaction-time-tester",
+        L"Reaction Time Tester",
         WS_OVERLAPPEDWINDOW,
         position_x, position_y, window_width, window_height,
         NULL,
@@ -483,8 +483,8 @@ bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength) { // Initia
     wchar_t* last_slash = wcsrchr(exe_path, '\\');  // Find the last directory separator.
     if (last_slash) *(last_slash + 1) = L'\0';  // Null-terminate to get directory path.
 
-    if (swprintf_s(cfgPath, maxLength, L"%s%s", exe_path, L"reaction.cfg") < 0 ||
-        swprintf_s(default_cfg_path, MAX_PATH, L"%s%s", exe_path, L"default.cfg") < 0) {  // Format paths for config files.
+    if (swprintf_s(cfgPath, maxLength, L"%s/config/%s", exe_path, L"reaction.cfg") < 0 ||
+        swprintf_s(default_cfg_path, MAX_PATH, L"%s/config/%s", exe_path, L"default.cfg") < 0) {  // Format paths for config files.
         HandleError(L"Failed to create config paths");
         return false;
     }

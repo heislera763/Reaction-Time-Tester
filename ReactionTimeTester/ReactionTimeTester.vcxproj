@@ -19,14 +19,14 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="reaction-time-tester.c" />
+    <ClCompile Include="ReactionTimeTester.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="default_settings.h" />
     <ClInclude Include="resource.h" />
   </ItemGroup>
   <ItemGroup>
-    <ResourceCompile Include="reaction-time-tester.rc" />
+    <ResourceCompile Include="ReactionTimeTester.rc" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="..\..\..\..\Pictures\icon.ico" />
@@ -84,13 +84,13 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <OutDir>$(SolutionDir)\config\</OutDir>
+    <OutDir>$(SolutionDir)\</OutDir>
     <IntDir>$(Platform)\$(Configuration)\</IntDir>
-    <TargetName>$(ProjectName)-win32</TargetName>
+    <TargetName>$(ProjectName)-32Bit</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <OutDir>$(SolutionDir)\config\</OutDir>
-    <TargetName>$(ProjectName)-x64</TargetName>
+    <OutDir>$(SolutionDir)\</OutDir>
+    <TargetName>$(ProjectName)-64Bit</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -149,6 +149,14 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>false</GenerateDebugInformation>
     </Link>
+    <PreBuildEvent>
+      <Command>
+      </Command>
+    </PreBuildEvent>
+    <PostBuildEvent>
+      <Command>
+      </Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
