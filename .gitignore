@@ -362,5 +362,5 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 *.exe
-/config/reaction.cfg
 /reaction-time-tester/RCa05572
+user.cfg
