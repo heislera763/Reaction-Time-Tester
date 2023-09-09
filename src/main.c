@@ -99,7 +99,8 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     if (raw_mouse_enabled == true) RegisterForRawInput(hwnd, 0x02);
     if (raw_input_debug_enabled == true) {
         wchar_t message[256];
-        swprintf(message, sizeof(message) / sizeof(wchar_t), L"RawKeyboardEnable: %d\nRawMouseEnable: %d\nRegisterForRawKeyboardInput: %s\nRegisterForRawMouseInput: %s", raw_keyboard_enabled, raw_mouse_enabled, RegisterForRawInput(hwnd, 0x06) ? L"True" : L"False", RegisterForRawInput(hwnd, 0x02) ? L"True" : L"False");
+        swprintf(message, sizeof(message) / sizeof(wchar_t), L"RawKeyboardEnable: %d\nRawMouseEnable: %d\nRegisterForRawKeyboardInput: %s\nRegisterForRawMouseInput: %s", 
+            raw_keyboard_enabled, raw_mouse_enabled, RegisterForRawInput(hwnd, 0x06) ? L"True" : L"False", RegisterForRawInput(hwnd, 0x02) ? L"True" : L"False");
         MessageBoxW(NULL, message, L"Raw Input Variables", MB_OK);
     }
 
@@ -236,7 +237,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             total_trial_number++;
 
             if (current_attempt < number_of_trials) {
-                swprintf_s(buffer, 100, L"Last: %.2lfms\nComplete %d trials for average.\nTrials so far: %d", reaction_times[(current_attempt - 1 + number_of_trials) % number_of_trials], number_of_trials, total_trial_number);
+                swprintf_s(buffer, 100, L"Last: %.2lfms\nComplete %d trials for average.\nTrials so far: %d",
+                    reaction_times[(current_attempt - 1 + number_of_trials) % number_of_trials], number_of_trials, total_trial_number);
             }
             else {
                 double total = 0;
@@ -244,7 +246,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                     total += reaction_times[i];
                 }
                 double average = total / number_of_trials;
-                swprintf_s(buffer, 100, L"Last: %.2lfms\nAverage (last %d): %.2lfms\nTrials so far: %d", reaction_times[(current_attempt - 1) % number_of_trials], number_of_trials, average, total_trial_number);
+                swprintf_s(buffer, 100, L"Last: %.2lfms\nAverage (last %d): %.2lfms\nTrials so far: %d",
+                    reaction_times[(current_attempt - 1) % number_of_trials], number_of_trials, average, total_trial_number);
             }
             if (trial_logging_enabled == 1) AppendToLog(reaction_times[(current_attempt - 1 + number_of_trials) % number_of_trials], total_trial_number, trial_log_file_name, NULL);
         }
@@ -258,7 +261,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         SetRectEmpty(&text_rectangle);
         DrawTextW(hdc, buffer, -1, &text_rectangle, DT_CALCRECT | DT_WORDBREAK);
         RECT centered_rectangle = rect;
-        centered_rectangle.top += (rect.bottom - rect.top - (text_rectangle.bottom - text_rectangle.top)) / 2; // Text doesn't center vertically (Possibly due to newline not being accounted for?)
+        centered_rectangle.top += (rect.bottom - rect.top - (text_rectangle.bottom - text_rectangle.top)) / 2; // Text doesn't center vertically (Newline not being accounted for?)
         DrawTextW(hdc, buffer, -1, &centered_rectangle, DT_CENTER | DT_WORDBREAK);
 
         EndPaint(hwnd, &ps);
@@ -372,10 +375,10 @@ void ValidateConfigSetting() { // Dumping ground for validating settings
     if (min_delay <= 0 || max_delay <= 0 || max_delay < min_delay || virtual_debounce < 0 || early_reset_delay <= 0) {
         HandleError(L"Invalid delay values in user.cfg");
     }
-    if ((raw_keyboard_enabled != false && raw_keyboard_enabled != true) || (raw_mouse_enabled != false && raw_mouse_enabled != true) || (raw_input_debug_enabled != false && raw_input_debug_enabled != true)) {
+    if (!IsValidBoolean(raw_keyboard_enabled) || !IsValidBoolean(raw_mouse_enabled) || !IsValidBoolean(raw_input_debug_enabled)) {
         HandleError(L"Invalid raw input settings in user.cfg");
     }
-    if ((trial_logging_enabled != false && trial_logging_enabled != true)|| (debug_logging_enabled != false && debug_logging_enabled != true)) {
+    if (!IsValidBoolean(trial_logging_enabled)|| !IsValidBoolean(debug_logging_enabled)) {
         HandleError(L"Invalid raw input settings in user.cfg");
     }
 }
@@ -411,6 +414,10 @@ void BrushCleanup() { // Hardcoded to delete only these brushes, should probably
     if (hReactBrush) DeleteObject(hReactBrush);
     if (hEarlyBrush) DeleteObject(hEarlyBrush);
     if (hResultBrush) DeleteObject(hResultBrush);
+}
+
+bool IsValidBoolean(int value) {
+    return value == true || value == false;
 }
 
 
@@ -600,7 +607,7 @@ bool AppendToLog(double reaction_time_value, int trial_number, wchar_t* logfile,
                 _wcserror_s(error_message, sizeof(error_message) / sizeof(wchar_t), err);
                 HandleError(error_message);
             } else 
-            if (reaction_time_value == 0 && trial_number == 0) { // Don't know if I like this check. reaction_time_value = 0 && trial_number = 0 shouldn't be possible unless the values are forced
+            if (reaction_time_value == 0 && trial_number == 0) { // Hypothetically reaction_time_value == 0 && trial_number == 0 shouldn't be possible unless the values are forced
                 fwprintf(log_file, L"ERROR: %s\n", external_error_message); // Note: This only logs errors after we have already loaded the config
                 fclose(log_file);
                 return true;
@@ -659,7 +666,7 @@ bool RegisterForRawInput(HWND hwnd, USHORT usage) {
 
 void HandleInput(HWND hwnd, bool is_mouse_input) {   // Primary input logic is done here
     if ((!Input_Enabled.Mouse && is_mouse_input) || (!Input_Enabled.Keyboard && !is_mouse_input)) {
-        return;  // Don't process the input if device is currently blocked
+        return;  // Ignore input if device is currently blocked
     }
     if (Current_State == STATE_REACT) {
         HandleReactClick(hwnd);
@@ -754,7 +761,6 @@ void ResetLogic(HWND hwnd) {
 
     Current_State = STATE_READY;
    
-    // Schedule the transition to "ready" after a random delay.
     SetTimer(hwnd, TIMER_READY, GenerateRandomDelay(min_delay,max_delay), NULL);
     InvalidateRect(hwnd, NULL, TRUE);
 }
