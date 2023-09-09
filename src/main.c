@@ -27,15 +27,15 @@ int resolution_width;
 int resolution_height;
 
 // Program State and Data
-typedef enum { // Define states
+typedef enum {
     STATE_READY,
     STATE_REACT,
     STATE_EARLY,
     STATE_RESULT
 } ProgramState;
-ProgramState Current_State = STATE_READY; // Initial state
+ProgramState Current_State = STATE_READY;
 
-typedef struct { // Struct for determining whether an input is allowable
+typedef struct { // Stores the state of input devices
     bool Mouse;
     bool Keyboard;
 } InputState;
@@ -43,13 +43,13 @@ InputState Input_Enabled = { true, true };
 
 int current_attempt = 0;
 int total_trial_number = 0;
-int key_states[256] = { 0 }; // 0: not pressed, 1: pressed
-double* reaction_times = NULL; // Array to store the last 5 reaction times.
+int key_states[256] = { 0 };
+double* reaction_times = NULL; // Stores the last 5 reaction times.
 LARGE_INTEGER start_time, end_time, frequency; // For high-resolution timing
-bool debounce_active = false; // This is a global indicator for whether or not program is halting inputs for Virtual Debounce feature
+bool debounce_active = false; // Global indicator for whether or not program is halting inputs for virtual debounce feature
 
 // UI and Rendering
-HBRUSH hReadyBrush, hReactBrush, hEarlyBrush, hResultBrush; // Brushes for painting the window
+HBRUSH hReadyBrush, hReactBrush, hEarlyBrush, hResultBrush;
 HFONT hFont;
 
 // Forward declarations for window procedure and other functions.
@@ -93,7 +93,7 @@ void ResetAll(HWND hwnd);
 
 
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
-    // Unused parameters
+    // Voiding unused parameters
     (void)hPrevInstance;
     (void)lpCmdLine;
 
@@ -108,44 +108,31 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     wc.hInstance = hInstance;
     wc.lpszClassName = CLASS_NAME;
 
-      // Register the window class.
+    // Register the window class.
     if (!RegisterClass(&wc)) {
         HandleError(L"Failed to register window class");
     }
 
     // Initialize brushes for painting.
-    LoadConfig(); // Load configuration at the start
+    LoadConfig();
 
     if (trial_logging_enabled == true) InitializeLogFileName(0);
     if (debug_logging_enabled == true) InitializeLogFileName(1);
 
-    // Get the dimensions of the main display
+    // Get the dimensions of the main display, then calculate the position to center the window
     int screen_width = GetSystemMetrics(SM_CXSCREEN);
     int screen_height = GetSystemMetrics(SM_CYSCREEN);
-
-    // Calculate the position to center the window
-    int window_width = resolution_width; // Your window width
-    int window_height = resolution_height; // Your window height
+    int window_width = resolution_width;
+    int window_height = resolution_height;
     int position_x = (screen_width - window_width) / 2;
     int position_y = (screen_height - window_height) / 2;
 
-    // Create the main window centered on the main display
-    HWND hwnd = CreateWindowExW(
-        0,
-        CLASS_NAME,
-        L"Reaction Time Tester",
-        WS_OVERLAPPEDWINDOW,
-        position_x, position_y, window_width, window_height,
-        NULL,
-        NULL,
-        hInstance,
-        NULL
-    );
+    // Create main window centered on the main display
+    HWND hwnd = CreateWindowExW(0, CLASS_NAME, L"Reaction Time Tester", WS_OVERLAPPEDWINDOW, position_x, position_y, window_width, window_height, NULL, NULL, hInstance, NULL);
 
     // Raw input
-    if (raw_keyboard_enabled == true) RegisterForRawInput(hwnd, 0x06); // Attempt to Register Keyboard
-    if (raw_mouse_enabled == true) RegisterForRawInput(hwnd, 0x02); // Attempt to Register Mouse
-
+    if (raw_keyboard_enabled == true) RegisterForRawInput(hwnd, 0x06);
+    if (raw_mouse_enabled == true) RegisterForRawInput(hwnd, 0x02);
     if (raw_input_debug_enabled == true) {
         wchar_t message[256];
         swprintf(message, sizeof(message) / sizeof(wchar_t), L"RawKeyboardEnable: %d\nRawMouseEnable: %d\nRegisterForRawKeyboardInput: %s\nRegisterForRawMouseInput: %s", raw_keyboard_enabled, raw_mouse_enabled, RegisterForRawInput(hwnd, 0x06) ? L"True" : L"False", RegisterForRawInput(hwnd, 0x02) ? L"True" : L"False");
@@ -165,41 +152,35 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     // Switch to ready state
     Current_State = STATE_READY;
 
-    // Seed the random number generator.
+    // Seed RNG and set initial timer
     srand((unsigned)time(NULL));
-
-    // Schedule the transition to react after a random delay.
     SetTimer(hwnd, TIMER_READY, GenerateRandomDelay(min_delay, max_delay), NULL);
 
+    // Prepare font
     int font_weight = FW_REGULAR;
     BOOL italics_enabled = FALSE;
-
     if (wcscmp(font_style, L"Bold") == 0) {
         font_weight = FW_BOLD;
     }
     else if (wcscmp(font_style, L"Italic") == 0) {
         italics_enabled = TRUE;
     }
-
-    // Prepare font using the loaded configurations
     hFont = CreateFontW(font_size, 0, 0, 0, font_weight, italics_enabled, FALSE, FALSE, ANSI_CHARSET,
         OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
         DEFAULT_PITCH | FF_DONTCARE, font_name);
-
     if (!hFont) {
         HandleError(L"Failed to create font.");
     }
 
-    // Enter the standard Windows message loop.
+    // Enter Windows message loop.
     MSG msg = {0};
     while (GetMessage(&msg, NULL, 0, 0)) {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
 
-    // Cleanup.
+    // Cleanup
     BrushCleanup();
-
     free(reaction_times);
 
     return 0;
@@ -217,7 +198,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         switch (LOWORD(lParam)) {
         case HTCLIENT: // In this section we use InputAllowed to change state of whether or not mouse can input commands
             if (!debounce_active) { Input_Enabled.Mouse = true; }
-            SetCursor(LoadCursor(NULL, IDC_HAND)); // Set the cursor to a hand cursor
+            SetCursor(LoadCursor(NULL, IDC_HAND)); // Switch to a hand cursor
             break;
         case HTLEFT:
         case HTRIGHT:
@@ -250,7 +231,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hwnd, &ps);
 
-        // Decide which brush to use based on the current state.
         HBRUSH hBrush;
         switch (Current_State) {
         case STATE_REACT:
@@ -270,22 +250,22 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             break;
 
         default:
-            hBrush = hReadyBrush; // Default to a known brush to avoid undefined behavior.
+            hBrush = hReadyBrush; // Default to a known brush to avoid undefined behavior
             HandleError(L"Invalid or undefined program state!");
             break;
         }
 
-        // Paint the entire window with the selected brush.
+        // Paint the entire window
         RECT rect;
         GetClientRect(hwnd, &rect);
         FillRect(hdc, &rect, hBrush);
 
-        // Display text based on the state.
+        // Display text
         SetBkMode(hdc, TRANSPARENT);
-        SetTextColor(hdc, RGB(255, 255, 255)); // Default to white text.
+        SetTextColor(hdc, RGB(255, 255, 255));
         SelectObject(hdc, hFont);
 
-        wchar_t buffer[100] = { 0 }; // Initialize buffer
+        wchar_t buffer[100] = { 0 }; // Buffer for any/all text
 
         if (Current_State == STATE_RESULT) {
             SetTextColor(hdc, RGB(results_font_color[0], results_font_color[1], results_font_color[2]));
@@ -320,7 +300,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         EndPaint(hwnd, &ps);
     } break;
 
-    case WM_TIMER:
+    case WM_TIMER: // Thank you windows for basically forcing a nested switch here
         switch (wParam) {
         case TIMER_READY:
             Current_State = STATE_READY;
@@ -331,16 +311,16 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         case TIMER_REACT:
             if (Current_State == STATE_READY) {
                 Current_State = STATE_REACT;
-                QueryPerformanceCounter(&start_time); // Start the timer for reaction time.
-                InvalidateRect(hwnd, NULL, TRUE); // Force repaint.
+                QueryPerformanceCounter(&start_time); // Start reaction timer
+                InvalidateRect(hwnd, NULL, TRUE); // Force repaint
             }
             break;
 
         case TIMER_EARLY:
-            ResetLogic(hwnd); // Reset the game after showing the "too early" state.
+            ResetLogic(hwnd); // Reset the game after showing the "too early" screen
             break;
 
-        case TIMER_DEBOUNCE:  // Debounce implementation is okay at this point, I 
+        case TIMER_DEBOUNCE:  // Debounce reset
             Input_Enabled.Mouse = true;
             Input_Enabled.Keyboard = true;
             debounce_active = false;
@@ -362,15 +342,15 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         if (GetRawInputData((HRAWINPUT)lParam, RID_INPUT, lpb, &dwSize, sizeof(RAWINPUTHEADER)) != dwSize) {
             HandleError(L"GetRawInputData did not return correct size!");
             free(lpb);
-            return 0; // added to ensure function exits after an error
+            return 0;
         }
 
         RAWINPUT* raw = (RAWINPUT*)lpb;
 
-        if (raw->header.dwType == RIM_TYPEKEYBOARD && raw_keyboard_enabled == true) { // Handle raw keyboard inputs
+        if (raw->header.dwType == RIM_TYPEKEYBOARD && raw_keyboard_enabled == true) {
             HandleRawKeyboardInput(raw, hwnd);
         }
-        else if (raw->header.dwType == RIM_TYPEMOUSE && raw_mouse_enabled == true) { // Handle raw mouse inputs
+        else if (raw->header.dwType == RIM_TYPEMOUSE && raw_mouse_enabled == true) {
             HandleRawMouseInput(raw, hwnd);
         }
 
@@ -378,7 +358,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     }
     break;
 
-    // Handle generic keyboard input:
+    // Handle generic keyboard input
     case WM_KEYDOWN:
     case WM_KEYUP:
         if (raw_keyboard_enabled == false) {
@@ -386,7 +366,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         }
         break;
 
-    // Handle generic mouse input:
+    // Handle generic mouse input
     case WM_LBUTTONDOWN:
     case WM_LBUTTONUP:
         if (raw_mouse_enabled == false) {
@@ -405,23 +385,23 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     return 0;
 }
 
-// Utility Functions:
+
+// Utility Functions
 void HandleError(const wchar_t* error_message) { // Generic error handler
     MessageBoxW(NULL, error_message, L"Error", MB_OK);
     if (debug_logging_enabled == 1) AppendToLog(0, 0, debug_log_file_name, error_message);
     exit(1);
 }
 
-void ValidateColors(const COLORREF color[]) { // This is usable in general applications
+void ValidateColors(const COLORREF color[]) {
     for (int i = 0; i < 3; i++) {
         if (color[i] > 255) {
             HandleError(L"Invalid color values in user.cfg");
-            return;
         }
     }
 }
 
-void ValidateConfigSetting() { // Dumping ground for validating settings. There is probably a general purpose-ish way to do this but I can't be bothered right now
+void ValidateConfigSetting() { // Dumping ground for validating settings
     if (resolution_width <= 0 || resolution_height <= 0) {
         HandleError(L"Invalid resolution values in user.cfg");
     }
@@ -437,19 +417,19 @@ void ValidateConfigSetting() { // Dumping ground for validating settings. There 
 }
 
 void RemoveComment(wchar_t* str) { // Removes comments and trailing spaces from strings read from .cfg files
-    wchar_t* semicolon_position = wcschr(str, L';'); // Locate the first occurrence of a semicolon, which denotes the start of a comment.
+    wchar_t* semicolon_position = wcschr(str, L';');
     if (semicolon_position) {
-        *semicolon_position = L'\0';  // Terminate the string at the start of the comment.
+        *semicolon_position = L'\0';
     }
 
     size_t len = wcslen(str);
-    while (len > 0 && iswspace(str[len - 1])) { // Loop to remove any trailing whitespace after excluding the comment.
+    while (len > 0 && iswspace(str[len - 1])) { // Loop to remove any trailing whitespace after excluding the comment
         str[len - 1] = L'\0';
         len--;
     }
 }
 
-int GenerateRandomDelay(int min, int max) { // Generate a random number in range min to max
+int GenerateRandomDelay(int min, int max) { // RNG stuff
     int range = max - min + 1;
     int buckets = RAND_MAX / range;
     int limit = buckets * range;
@@ -471,30 +451,27 @@ void BrushCleanup() { // Hardcoded to delete only these brushes, should probably
 
 
 // Configuration and setup functions
-bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength) { // Initializes paths and possibly copies default.cfg to user.cfg
+bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength) { // Initializes paths and attempts to copy default.cfg to user.cfg
     wchar_t exe_path[MAX_PATH];
     wchar_t default_cfg_path[MAX_PATH];
 
-    if (!GetModuleFileNameW(NULL, exe_path, MAX_PATH)) {  // Failed to get current module's file path.
+    if (!GetModuleFileNameW(NULL, exe_path, MAX_PATH)) {
         HandleError(L"Failed to get module file name");
-        return false;
     }
 
-    wchar_t* last_slash = wcsrchr(exe_path, '\\');  // Find the last directory separator.
-    if (last_slash) *(last_slash + 1) = L'\0';  // Null-terminate to get directory path.
+    wchar_t* last_slash = wcsrchr(exe_path, '\\');  // Find the last directory separator
+    if (last_slash) *(last_slash + 1) = L'\0';  // Null-terminate to get directory path
 
     if (swprintf_s(cfgPath, maxLength, L"%s/config/%s", exe_path, L"user.cfg") < 0 ||
-        swprintf_s(default_cfg_path, MAX_PATH, L"%s/config/%s", exe_path, L"default.cfg") < 0) {  // Format paths for config files.
+        swprintf_s(default_cfg_path, MAX_PATH, L"%s/config/%s", exe_path, L"default.cfg") < 0) {
         HandleError(L"Failed to create config paths");
-        return false;
     }
 
-    if (GetFileAttributesW(cfgPath) == INVALID_FILE_ATTRIBUTES) {  // If user.cfg doesn't exist, copy from default.cfg.
+    if (GetFileAttributesW(cfgPath) == INVALID_FILE_ATTRIBUTES) {  // If user.cfg doesn't exist, copy from default.cfg
         FILE* default_file;
         errno_t err1 = _wfopen_s(&default_file, default_cfg_path, L"rb");
         if (err1 != 0 || !default_file) {
             HandleError(L"Failed to open default.cfg");
-            return false;
         }
 
         FILE* new_file;
@@ -502,16 +479,14 @@ bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength) { // Initia
         if (err2 != 0 || !new_file) {
             fclose(default_file);
             HandleError(L"Failed to create user.cfg");
-            return false;
         }
 
         char buffer[1024];
         size_t bytes_read;
-        while ((bytes_read = fread(buffer, 1, sizeof(buffer), default_file)) > 0) {  // Copy contents from default.cfg to user.cfg in chunks.
+        while ((bytes_read = fread(buffer, 1, sizeof(buffer), default_file)) > 0) {  // Copy contents from default.cfg to user.cfg in chunks
             if (fwrite(buffer, 1, bytes_read, new_file) < bytes_read) { // Has write operation written the correct number of bytes?
                 fclose(new_file); fclose(default_file);
                 HandleError(L"Failed to write to user.cfg");
-                return false;
             }
         }
         fclose(new_file); fclose(default_file);
@@ -519,29 +494,29 @@ bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength) { // Initia
     return true;
 }
 
-void LoadColorConfiguration(const wchar_t* cfgPath, const wchar_t* sectionName, const wchar_t* colorName, const COLORREF* targetColorArray) { // Load RGB from config file
+void LoadColorConfiguration(const wchar_t* cfgPath, const wchar_t* sectionName, const wchar_t* colorName, const COLORREF* targetColorArray) { // Load RGB
     wchar_t buffer[255];
     GetPrivateProfileStringW(sectionName, colorName, L"", buffer, sizeof(buffer) / sizeof(wchar_t), cfgPath);  // Retrieve color configuration as comma-separated RGB values
 
-    if (wcslen(buffer) == 0) {  // Check color data retrieval
+    if (wcslen(buffer) == 0) {
         HandleError(L"Failed to read color configuration");
     }
 
-    swscanf_s(buffer, L"%d,%d,%d", &targetColorArray[0], &targetColorArray[1], &targetColorArray[2]);  // Extract individual RGB values.
-    ValidateColors(targetColorArray);  // Validate RGB values
+    swscanf_s(buffer, L"%d,%d,%d", &targetColorArray[0], &targetColorArray[1], &targetColorArray[2]);  // Extract individual RGB values
+    ValidateColors(targetColorArray);
 }
 
 void LoadFontConfiguration(const wchar_t* cfgPath, wchar_t* targetFontName, size_t maxLength, int* fontSize, wchar_t* fontStyle, size_t fontStyleLength) {
     GetPrivateProfileStringW(L"Fonts", L"FontName", DEFAULT_FONT_NAME, targetFontName, (DWORD)maxLength, cfgPath);  // Retrieve font name
-    RemoveComment(targetFontName);  // Cleanup any comments from the retrieved font name
-    if (wcslen(targetFontName) == 0) {  // Check font name retrieval
+    RemoveComment(targetFontName);
+    if (wcslen(targetFontName) == 0) {
         HandleError(L"Failed to read font configuration");
     }
 
-    *fontSize = GetPrivateProfileIntW(L"Fonts", L"FontSize", DEFAULT_FONT_SIZE, cfgPath);  // Retrieve font size
+    *fontSize = GetPrivateProfileIntW(L"Fonts", L"FontSize", DEFAULT_FONT_SIZE, cfgPath);
 
-    GetPrivateProfileStringW(L"Fonts", L"FontStyle", DEFAULT_FONT_STYLE, fontStyle, (DWORD)fontStyleLength, cfgPath);  // Retrieve font style
-    RemoveComment(fontStyle);  // Cleanup any comments from the retrieved font style.
+    GetPrivateProfileStringW(L"Fonts", L"FontStyle", DEFAULT_FONT_STYLE, fontStyle, (DWORD)fontStyleLength, cfgPath);
+    RemoveComment(fontStyle);
 }
 
 void LoadTrialConfiguration(const wchar_t* cfgPath) {
@@ -552,7 +527,6 @@ void LoadTrialConfiguration(const wchar_t* cfgPath) {
 }
 
 void LoadTextColorConfiguration(const wchar_t* cfgPath) {
-    //wchar_t buffer[MAX_PATH] = L"";
     LoadColorConfiguration(cfgPath, L"Fonts", L"EarlyFontColor", early_font_color);
     LoadColorConfiguration(cfgPath, L"Fonts", L"ResultsFontColor", results_font_color);
 }
@@ -562,7 +536,6 @@ void AllocateMemoryForReactionTimes() {
     reaction_times = (double*)malloc(total_size);
     if (reaction_times == NULL) {
         HandleError(L"Failed to allocate memory for reaction times!");
-        return; // Return to prevent further execution
     }
     memset(reaction_times, 0, total_size);
 }
@@ -571,7 +544,7 @@ void LoadConfig() {
     wchar_t cfg_path[MAX_PATH];
 
     if (!InitializeConfigFileAndPath(cfg_path, MAX_PATH)) {
-        exit(1); // Exiting as the path acquisition failed
+        exit(1);
     }
 
     resolution_width = GetPrivateProfileIntW(L"Resolution", L"ResolutionWidth", DEFAULT_RESOLUTION_WIDTH, cfg_path);
@@ -598,16 +571,16 @@ void LoadConfig() {
     trial_logging_enabled = GetPrivateProfileIntW(L"Toggles", L"TrialLoggingEnabled", 0, cfg_path);
     debug_logging_enabled = GetPrivateProfileIntW(L"Toggles", L"DebugLoggingEnabled", 0, cfg_path);
 
-    ValidateConfigSetting(); // Reminder: This is hardcoded to check for invalid settings, you must add those checks to the function directly (for now)
+    ValidateConfigSetting(); // Reminder: This is hardcoded to check for invalid settings, you must add those checks to this function directly
 
     LoadTrialConfiguration(cfg_path);
     LoadTextColorConfiguration(cfg_path);
     LoadFontConfiguration(cfg_path, font_name, MAX_PATH, &font_size, font_style, MAX_PATH);
 
-    AllocateMemoryForReactionTimes();
+    AllocateMemoryForReactionTimes(); // Would it be better to drop this?
 }
 
-void InitializeLogFileName(int log_type) { // Initialize a log file name,log_type = 0 = trial log, log_type = 1 = debug log
+void InitializeLogFileName(int log_type) { // log_type = 0 = trial log, log_type = 1 = debug log
     time_t t;
     struct tm* tmp;
     
@@ -632,7 +605,7 @@ void InitializeLogFileName(int log_type) { // Initialize a log file name,log_typ
 bool AppendToLog(double reaction_time_value, int trial_number, wchar_t* logfile, const wchar_t* external_error_message) {  // Handles log file operations
     wchar_t exe_path[MAX_PATH];
     wchar_t log_file_path[MAX_PATH];
-    wchar_t log_dir_path[MAX_PATH];  // Added for the directory path
+    wchar_t log_dir_path[MAX_PATH];
 
     // Get the directory where the executable is running
     if (!GetModuleFileName(NULL, exe_path, MAX_PATH)) {
@@ -663,7 +636,7 @@ bool AppendToLog(double reaction_time_value, int trial_number, wchar_t* logfile,
                 _wcserror_s(error_message, sizeof(error_message) / sizeof(wchar_t), err);
                 HandleError(error_message);
             } else 
-            if (reaction_time_value == 0 && trial_number == 0) { // Don't know if I like this check but reaction_time_value = 0 && trial_number = 0 shouldn't be possible unless the values are forced, so it works fine
+            if (reaction_time_value == 0 && trial_number == 0) { // Don't know if I like this check. reaction_time_value = 0 && trial_number = 0 shouldn't be possible unless the values are forced
                 fwprintf(log_file, L"ERROR: %s\n", external_error_message); // Note: This only logs errors after we have already loaded the config
                 fclose(log_file);
                 return true;
@@ -720,7 +693,7 @@ bool RegisterForRawInput(HWND hwnd, USHORT usage) {
     return true;
 }
 
-void HandleInput(HWND hwnd, bool is_mouse_input) {   // Primary "game" logic is done here.
+void HandleInput(HWND hwnd, bool is_mouse_input) {   // Primary input logic is done here
     if ((!Input_Enabled.Mouse && is_mouse_input) || (!Input_Enabled.Keyboard && !is_mouse_input)) {
         return;  // Don't process the input if device is currently blocked
     }
@@ -748,7 +721,7 @@ void HandleInput(HWND hwnd, bool is_mouse_input) {   // Primary "game" logic is 
 }
 
 void HandleGenericKeyboardInput(HWND hwnd) {
-    for (int vkey = 0; vkey <= 255; vkey++) { // loop through all possible VK values
+    for (int vkey = 0; vkey <= 255; vkey++) {
         UpdateKeyState(vkey, hwnd);
     }
 }
@@ -758,35 +731,35 @@ void HandleRawKeyboardInput(RAWINPUT* raw, HWND hwnd) {
 
     if (raw->data.keyboard.Flags == RI_KEY_MAKE && IsAlphanumeric(vkey) && !key_states[vkey]) {
         HandleInput(hwnd, false);
-        key_states[vkey] = true; // Latch the key state
+        key_states[vkey] = true;
     }
     else if (raw->data.keyboard.Flags == RI_KEY_BREAK) {
-        key_states[vkey] = false; // Unlatch on key release
+        key_states[vkey] = false;
     }
 }
 
 void HandleGenericMouseInput(HWND hwnd) {
-    static bool was_button_pressed = false; // 0: not pressed, 1: pressed
+    static bool was_button_pressed = false;
     bool is_button_pressed = GetAsyncKeyState(VK_LBUTTON) & 0x8000;
 
-    if (is_button_pressed && !was_button_pressed) { // Check for transition from up to down
+    if (is_button_pressed && !was_button_pressed) {
         HandleInput(hwnd, true);
-        was_button_pressed = true; // Latch the button state
+        was_button_pressed = true;
     }
-    else if (!is_button_pressed && was_button_pressed) { // Check for transition from down to up
-        was_button_pressed = false; // Unlatch immediately on button release
+    else if (!is_button_pressed && was_button_pressed) {
+        was_button_pressed = false;
     }
 }
 
 void HandleRawMouseInput(RAWINPUT* raw, HWND hwnd) {
-    static bool was_button_pressed = false; // 0: not pressed, 1: pressed
+    static bool was_button_pressed = false;
 
     if (raw->data.mouse.usButtonFlags & RI_MOUSE_LEFT_BUTTON_DOWN && !was_button_pressed) {
         HandleInput(hwnd, true);
-        was_button_pressed = true; // Latch the button state
+        was_button_pressed = true;
     }
     else if (raw->data.mouse.usButtonFlags & RI_MOUSE_LEFT_BUTTON_UP && was_button_pressed) {
-        was_button_pressed = false; // Unlatch immediately on button release
+        was_button_pressed = false;
     }
 }
 
@@ -800,10 +773,10 @@ void UpdateKeyState(int vkey, HWND hwnd) {
         bool is_key_pressed = GetAsyncKeyState(vkey) & 0x8000;
         if (is_key_pressed && !key_states[vkey]) {
             HandleInput(hwnd, false);
-            key_states[vkey] = 1; // Latch the key state
+            key_states[vkey] = 1;
         }
         else if (!is_key_pressed && key_states[vkey]) {
-            key_states[vkey] = 0; // Unlatch on key release
+            key_states[vkey] = 0;
         }
     }
 }
@@ -811,18 +784,14 @@ void UpdateKeyState(int vkey, HWND hwnd) {
 
 // Main application logic functions
 void ResetLogic(HWND hwnd) {
-    // Kill all timers.
     KillTimer(hwnd, TIMER_READY);
     KillTimer(hwnd, TIMER_REACT);
     KillTimer(hwnd, TIMER_EARLY);
-    // KillTimer(hwnd, TIMER_DEBOUNCE); // Keeping this commented out for now
 
     Current_State = STATE_READY;
    
-    // Schedule the transition to green after a random delay.
+    // Schedule the transition to "ready" after a random delay.
     SetTimer(hwnd, TIMER_READY, GenerateRandomDelay(min_delay,max_delay), NULL);
-
-    // Force repaint.
     InvalidateRect(hwnd, NULL, TRUE);
 }
 
@@ -833,13 +802,13 @@ void HandleReactClick(HWND hwnd) {
     reaction_times[current_attempt % number_of_trials] = time_taken;
     current_attempt++;
 
-    Current_State = STATE_RESULT;   // Change to results screen
-    InvalidateRect(hwnd, NULL, TRUE);  // Force repaint.
+    Current_State = STATE_RESULT;
+    InvalidateRect(hwnd, NULL, TRUE);
 }
 
 void HandleEarlyClick(HWND hwnd) {
-    Current_State = STATE_EARLY;  // Early state
-    SetTimer(hwnd, TIMER_EARLY, early_reset_delay, NULL); // Early state eventually resets back to Ready state
+    Current_State = STATE_EARLY;
+    SetTimer(hwnd, TIMER_EARLY, early_reset_delay, NULL); // Early state eventually resets back to Ready state regardless of user input
     InvalidateRect(hwnd, NULL, TRUE);
 }
 
