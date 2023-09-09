@@ -1,5 +1,9 @@
-// Various default settings
+// Various default settings and timer names
 #pragma once
+#define TIMER_READY 1
+#define TIMER_REACT 2
+#define TIMER_EARLY 3
+#define TIMER_DEBOUNCE 4 
 #define DEFAULT_MIN_DELAY 1000
 #define DEFAULT_MAX_DELAY 3000
 #define DEFAULT_EARLY_RESET_DELAY 3000

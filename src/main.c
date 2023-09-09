@@ -9,11 +9,6 @@
 #include <stdbool.h>
 #include "main_definitions.h"
 
-#define TIMER_READY 1
-#define TIMER_REACT 2
-#define TIMER_EARLY 3
-#define TIMER_DEBOUNCE 4
-
 // Configuration and Settings
 COLORREF ready_color[3], react_color[3], early_color[3], result_color[3], early_font_color[3], results_font_color[3];
 int min_delay, max_delay, number_of_trials, early_reset_delay, virtual_debounce;
