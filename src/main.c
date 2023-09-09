@@ -375,12 +375,6 @@ void ValidateConfigSetting() { // Dumping ground for validating settings
     if (min_delay <= 0 || max_delay <= 0 || max_delay < min_delay || virtual_debounce < 0 || early_reset_delay <= 0) {
         HandleError(L"Invalid delay values in user.cfg");
     }
-    if (!IsValidBoolean(raw_keyboard_enabled) || !IsValidBoolean(raw_mouse_enabled) || !IsValidBoolean(raw_input_debug_enabled)) {
-        HandleError(L"Invalid raw input settings in user.cfg");
-    }
-    if (!IsValidBoolean(trial_logging_enabled)|| !IsValidBoolean(debug_logging_enabled)) {
-        HandleError(L"Invalid raw input settings in user.cfg");
-    }
 }
 
 void RemoveComment(wchar_t* str) { // Removes comments and trailing spaces from strings read from .cfg files
@@ -414,10 +408,6 @@ void BrushCleanup() { // Hardcoded to delete only these brushes, should probably
     if (hReactBrush) DeleteObject(hReactBrush);
     if (hEarlyBrush) DeleteObject(hEarlyBrush);
     if (hResultBrush) DeleteObject(hResultBrush);
-}
-
-bool IsValidBoolean(int value) {
-    return value == true || value == false;
 }
 
 

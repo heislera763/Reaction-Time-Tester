@@ -21,7 +21,6 @@ void ValidateConfigSetting();
 void RemoveComment(wchar_t* str);
 int  GenerateRandomDelay(int min, int max);
 void BrushCleanup();
-bool IsValidBoolean(int value);
 
 // Configuration and setup functions
 bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength);
