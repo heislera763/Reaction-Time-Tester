@@ -7,7 +7,7 @@
 #include <time.h>
 #include <stdio.h>
 #include <stdbool.h>
-#include "default_settings.h"
+#include "main_definitions.h"
 
 #define TIMER_READY 1
 #define TIMER_REACT 2
@@ -54,42 +54,6 @@ HFONT hFont;
 
 // Forward declarations for window procedure and other functions.
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
-
-// Utility functions
-void HandleError(const wchar_t* errorMessage);
-void ValidateColors(const COLORREF color[]);
-void ValidateConfigSetting();
-void RemoveComment(wchar_t* str);
-int GenerateRandomDelay(int min, int max);
-void BrushCleanup();
-
-// Configuration and setup functions
-bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength);
-void LoadColorConfiguration(const wchar_t* cfgPath, const wchar_t* sectionName, const wchar_t* colorName, const COLORREF* targetColorArray);
-void LoadFontConfiguration(const wchar_t* cfgPath, wchar_t* targetFontName, size_t maxLength, int* fontSize, wchar_t* fontStyle, size_t fontStyleLength);
-void LoadTrialConfiguration(const wchar_t* cfgPath);
-void LoadTextColorConfiguration(const wchar_t* cfgPath);
-void AllocateMemoryForReactionTimes();
-void LoadConfig();
-void InitializeLogFileName(int log_type);
-bool AppendToLog(double reaction_time_value, int trial_number, wchar_t* log_file, const wchar_t* external_error_message);
-void LoadAndSetIcon(HWND hwnd);
-
-// Input handling functions
-bool RegisterForRawInput(HWND hwnd, USHORT usage);
-void HandleInput(HWND hwnd, bool is_mouse_input);
-void HandleGenericKeyboardInput(HWND hwnd);
-void HandleRawKeyboardInput(RAWINPUT* raw, HWND hwnd);
-void HandleGenericMouseInput(HWND hwnd);
-void HandleRawMouseInput(RAWINPUT* raw, HWND hwnd);
-bool IsAlphanumeric(int vkey);
-void UpdateKeyState(int vkey, HWND hwnd);
-
-// Main application logic functions
-void ResetLogic(HWND hwnd);
-void HandleReactClick(HWND hwnd);
-void HandleEarlyClick(HWND hwnd);
-void ResetAll(HWND hwnd);
 
 
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
