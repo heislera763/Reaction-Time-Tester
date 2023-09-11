@@ -11,20 +11,25 @@
 
 // Configuration
 typedef struct {
+    // Appearance
     COLORREF early_font[3];
     COLORREF results_font[3];
-    int averaging_trials;
-    int total_trials;
-    bool raw_keyboard;
-    bool raw_mouse;
-    bool raw_input_debug;
-    bool trial_logging;
-    bool debug_logging;
     wchar_t font_name[MAX_PATH];
     wchar_t font_style[MAX_PATH];
     unsigned int font_size;
     unsigned int resolution_width;
     unsigned int resolution_height;
+
+    // Toggles
+    bool raw_keyboard;
+    bool raw_mouse;
+    bool raw_input_debug;
+    bool trial_logging;
+    bool debug_logging;
+
+    // Game Options
+    int averaging_trials;
+    int total_trials;
     unsigned int min_delay;
     unsigned int max_delay;
     unsigned int early_reset_delay;
@@ -32,22 +37,27 @@ typedef struct {
 
 // Program State and Data
 typedef struct {
+    // Program State ##REVIEW## Very bad variable names/Maybe this structure is just bad
     enum {
         STATE_READY,
         STATE_REACT,
         STATE_EARLY,
         STATE_RESULT
-    } state; // ##REVIEW## Bad variable name
+    } state;
+    int current_attempt;
+    int trial_iteration;
 
+    // Input State
     bool input_mouse;
     bool input_keyboard;
     bool virtual_debounce;
     bool debounce_active;
+    int key_states[256];
+
+    // Logging and Data
+    double reaction_times[256]; // ##REVIEW## Hardcoded size for now, will be user configurable later.
     wchar_t trial_log_path[MAX_PATH];
     wchar_t debug_log_path[MAX_PATH];
-    int current_attempt;
-    int trial_iteration;
-    int key_states[256];
 
     // High-resolution timing
     LARGE_INTEGER start_time;
@@ -65,10 +75,8 @@ typedef struct {
 } UI;
 
 Configuration config;
-ProgramState program_state = { .state = STATE_READY, .virtual_debounce = DEFAULT_VIRTUAL_DEBOUNCE };
+ProgramState program_state = { .state = STATE_READY, .virtual_debounce = DEFAULT_VIRTUAL_DEBOUNCE, .reaction_times = {0}};
 UI ui;
-
-double reaction_times[256] = {0}; // Hardcoded size for now, will be user configurable later. ##REVIEW## Does this belong in a stuct?
 
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
     // Voiding unused parameters
@@ -250,19 +258,20 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
             if (program_state.current_attempt < config.averaging_trials) {
                 swprintf_s(buffer, 100, L"Last: %.2lfms\nComplete %d trials for average.\nTrials so far: %d",
-                    reaction_times[(program_state.current_attempt - 1 + config.averaging_trials) % config.averaging_trials], config.averaging_trials, program_state.trial_iteration);
+                    program_state.reaction_times[(program_state.current_attempt - 1 + config.averaging_trials) % config.averaging_trials], config.averaging_trials, program_state.trial_iteration);
             }
             else {
                 double total = 0;
                 for (int i = 0; i < config.averaging_trials; i++) {
-                    total += reaction_times[i];
+                    total += program_state.reaction_times[i];
                 }
                 double average = total / config.averaging_trials;
                 swprintf_s(buffer, 100, L"Last: %.2lfms\nAverage (last %d): %.2lfms\nTrials so far: %d",
-                    reaction_times[(program_state.current_attempt - 1) % config.averaging_trials], config.averaging_trials, average, program_state.trial_iteration);
+                    program_state.reaction_times[(program_state.current_attempt - 1) % config.averaging_trials], config.averaging_trials, average, program_state.trial_iteration);
             }
             if (config.trial_logging == 1){
-                AppendToLog(reaction_times[(program_state.current_attempt - 1 + config.averaging_trials) % config.averaging_trials], program_state.trial_iteration, program_state.trial_log_path, NULL);
+                AppendToLog(program_state.reaction_times[(program_state.current_attempt - 1 + config.averaging_trials) % config.averaging_trials],
+                    program_state.trial_iteration, program_state.trial_log_path, NULL);
             }
         }
         else if (program_state.state == STATE_EARLY) {
@@ -671,7 +680,7 @@ void HandleInput(HWND hwnd, bool is_mouse_input) {   // Primary input logic is d
         if ((program_state.state == STATE_RESULT) && program_state.current_attempt == config.averaging_trials) { // This seems very odd, really not sure why it was done this way
             program_state.current_attempt = 0;
             for (int i = 0; i < config.averaging_trials; i++) {
-                reaction_times[i] = 0;
+                program_state.reaction_times[i] = 0;
             }
         }
         ResetLogic(hwnd);
@@ -765,7 +774,7 @@ void HandleReactClick(HWND hwnd) {
     QueryPerformanceCounter(&program_state.end_time);
     double time_taken = ((double)(program_state.end_time.QuadPart - program_state.start_time.QuadPart) / program_state.frequency.QuadPart) * 1000;
 
-    reaction_times[program_state.current_attempt % config.averaging_trials] = time_taken;
+    program_state.reaction_times[program_state.current_attempt % config.averaging_trials] = time_taken;
     program_state.current_attempt++;
 
     program_state.state = STATE_RESULT;
@@ -782,7 +791,7 @@ void HandleEarlyClick(HWND hwnd) {
 void ResetAll(HWND hwnd) { // ##REVIEW## This isn't used but I guess it could be used to manually reset attempts, might break logging though
     program_state.current_attempt = 0;
     for (int i = 0; i < config.averaging_trials; i++) {
-        reaction_times[i] = 0;
+        program_state.reaction_times[i] = 0;
     }
     ResetLogic(hwnd);
 }
