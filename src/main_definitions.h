@@ -8,7 +8,8 @@
 #define DEFAULT_MAX_DELAY 3000
 #define DEFAULT_EARLY_RESET_DELAY 3000
 #define DEFAULT_VIRTUAL_DEBOUNCE 50
-#define DEFAULT_NUM_TRIALS 5
+#define DEFAULT_AVG_TRIALS 5
+#define DEFAULT_TOTAL_TRIALS 1000
 #define DEFAULT_RAWKEYBOARDENABLE 1
 #define DEFAULT_RAWMOUSEENABLE 1
 #define DEFAULT_FONT_SIZE 32
@@ -17,6 +18,8 @@
 #define DEFAULT_RESOLUTION_WIDTH 1280
 #define DEFAULT_RESOLUTION_HEIGHT 720
 
+// Forward declarations for window procedure and other functions.
+LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 // Utility functions
 void HandleError(const wchar_t* errorMessage);
@@ -29,13 +32,13 @@ void BrushCleanup();
 // Configuration and setup functions
 bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength);
 void LoadColorConfiguration(const wchar_t* cfgPath, const wchar_t* sectionName, const wchar_t* colorName, const COLORREF* targetColorArray);
-void LoadFontConfiguration(const wchar_t* cfgPath, wchar_t* targetFontName, size_t maxLength, int* fontSize, wchar_t* fontStyle, size_t fontStyleLength);
+void LoadFontConfiguration(const wchar_t* cfgPath, wchar_t* targetFontName, size_t maxLength, unsigned int* fontSize, wchar_t* fontStyle, size_t fontStyleLength);
 void LoadTrialConfiguration(const wchar_t* cfgPath);
 void LoadTextColorConfiguration(const wchar_t* cfgPath);
 void AllocateMemoryForReactionTimes();
 void LoadConfig();
 void InitializeLogFileName(int log_type);
-bool AppendToLog(double reaction_time_value, int trial_number, wchar_t* log_file, const wchar_t* external_error_message);
+bool AppendToLog(double value, int iteration, wchar_t* log_file, const wchar_t* external_error_message);
 void LoadAndSetIcon(HWND hwnd);
 
 // Input handling functions

@@ -9,47 +9,76 @@
 #include <stdbool.h>
 #include "main_definitions.h"
 
+// Putting everything relevant to LoadConfig() in this struct:
+/*
+    COLORREF ready_color[3], react_color[3], early_color[3], result_color[3];
+    wchar_t cfg_path[MAX_PATH];
+
+    hReadyBrush
+    hReactBrush
+    hEarlyBrush
+    hResultBrush
+
+    min_delay = GetPrivateProfileIntW(L"Delays", L"MinDelay", DEFAULT_MIN_DELAY, cfg_path);
+    max_delay = GetPrivateProfileIntW(L"Delays", L"MaxDelay", DEFAULT_MAX_DELAY, cfg_path);
+    early_reset_delay = GetPrivateProfileIntW(L"Delays", L"EarlyResetDelay", DEFAULT_EARLY_RESET_DELAY, cfg_path);
+    input_status.virtual_debounce = GetPrivateProfileIntW(L"Delays", L"VirtualDebounce", DEFAULT_VIRTUAL_DEBOUNCE, cfg_path);
+
+    raw_keyboard_enabled = GetPrivateProfileIntW(L"Toggles", L"RawKeyboardEnabled", DEFAULT_RAWKEYBOARDENABLE, cfg_path);
+    raw_mouse_enabled = GetPrivateProfileIntW(L"Toggles", L"RawMouseEnabled", DEFAULT_RAWMOUSEENABLE, cfg_path);
+    raw_input_debug_enabled = GetPrivateProfileIntW(L"Toggles", L"RawInputDebug", 0, cfg_path);
+    trial_logging_enabled = GetPrivateProfileIntW(L"Toggles", L"TrialLoggingEnabled", 0, cfg_path);
+    debug_logging_enabled = GetPrivateProfileIntW(L"Toggles", L"DebugLoggingEnabled", 0, cfg_path);
+
+    ValidateConfigSetting(); // Reminder: This is hardcoded to check for invalid settings, you must add those checks to this function directly
+
+    LoadTrialConfiguration(cfg_path);
+    LoadTextColorConfiguration(cfg_path);
+    LoadFontConfiguration(cfg_path, font_name, MAX_PATH, &font_size, font_style, MAX_PATH);
+*/
+
+
+
+
+
 // Configuration and Settings
-COLORREF ready_color[3], react_color[3], early_color[3], result_color[3], early_font_color[3], results_font_color[3];
-int min_delay, max_delay, number_of_trials, early_reset_delay, virtual_debounce;
+COLORREF early_font_color[3], results_font_color[3];
+
+int averaging_trials, total_trials;
 bool raw_keyboard_enabled, raw_mouse_enabled, raw_input_debug_enabled, trial_logging_enabled, debug_logging_enabled;
-wchar_t trial_log_file_name[MAX_PATH];
-wchar_t debug_log_file_name[MAX_PATH];
-wchar_t font_name[MAX_PATH];
-wchar_t font_style[MAX_PATH];
-int font_size;
-int resolution_width;
-int resolution_height;
+
+wchar_t font_name[MAX_PATH], font_style[MAX_PATH];
+unsigned int font_size, resolution_width, resolution_height, min_delay, max_delay, early_reset_delay;
+
+
+double reaction_times[256] = {0}; // Hardcoded size for now, will be user configurable later
 
 // Program State and Data
-typedef enum {
+enum {
     STATE_READY,
     STATE_REACT,
     STATE_EARLY,
     STATE_RESULT
-} ProgramState;
-ProgramState Current_State = STATE_READY;
+} Program_State = STATE_READY;
 
-typedef struct { // Stores the state of input devices
-    bool Mouse;
-    bool Keyboard;
-} InputState;
-InputState Input_Enabled = { true, true };
+struct { // Stores the active/inactive state of input devices
+    bool mouse, keyboard, virtual_debounce;
+} input_status = {true, true, DEFAULT_VIRTUAL_DEBOUNCE};
+
+struct {
+    wchar_t trial_log[MAX_PATH];
+    wchar_t debug_log[MAX_PATH];
+} log_paths;
 
 int current_attempt = 0;
-int total_trial_number = 0;
-int key_states[256] = { 0 };
-double* reaction_times = NULL; // Stores the last 5 reaction times.
+int trial_iteration = 0;
+int key_states[256] = {0};
 LARGE_INTEGER start_time, end_time, frequency; // For high-resolution timing
 bool debounce_active = false; // Global indicator for whether or not program is halting inputs for virtual debounce feature
 
 // UI and Rendering
 HBRUSH hReadyBrush, hReactBrush, hEarlyBrush, hResultBrush;
 HFONT hFont;
-
-// Forward declarations for window procedure and other functions.
-LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
-
 
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
     // Voiding unused parameters
@@ -110,7 +139,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     }
 
     // Switch to ready state
-    Current_State = STATE_READY;
+    Program_State = STATE_READY;
 
     // Seed RNG and set initial timer
     srand((unsigned)time(NULL));
@@ -139,9 +168,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
         DispatchMessage(&msg);
     }
 
-    // Cleanup
     BrushCleanup();
-    free(reaction_times);
 
     return 0;
 }
@@ -157,31 +184,31 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     case WM_SETCURSOR:
         switch (LOWORD(lParam)) {
         case HTCLIENT: // In this section we use InputAllowed to change state of whether or not mouse can input commands
-            if (!debounce_active) { Input_Enabled.Mouse = true; }
+            if (!debounce_active) { input_status.mouse = true; }
             SetCursor(LoadCursor(NULL, IDC_HAND)); // Switch to a hand cursor
             break;
         case HTLEFT:
         case HTRIGHT:
-            Input_Enabled.Mouse = false;
+            input_status.mouse = false;
             SetCursor(LoadCursor(NULL, IDC_SIZEWE)); // Left or right border (resize cursor)
             break;
         case HTTOP:
         case HTBOTTOM:
-            Input_Enabled.Mouse = false;
+            input_status.mouse = false;
             SetCursor(LoadCursor(NULL, IDC_SIZENS)); // Top or bottom border (resize cursor)
             break;
         case HTTOPLEFT:
         case HTBOTTOMRIGHT:
-            Input_Enabled.Mouse = false;
+            input_status.mouse = false;
             SetCursor(LoadCursor(NULL, IDC_SIZENWSE)); // Top-left or bottom-right corner (diagonal resize cursor)
             break;
         case HTTOPRIGHT:
         case HTBOTTOMLEFT:
-            Input_Enabled.Mouse = false;
+            input_status.mouse = false;
             SetCursor(LoadCursor(NULL, IDC_SIZENESW)); // Top-right or bottom-left corner (diagonal resize cursor)
             break;
         default:
-            Input_Enabled.Mouse = false;
+            input_status.mouse = false;
             SetCursor(LoadCursor(NULL, IDC_ARROW)); // Use the default cursor
             break;
         }
@@ -192,7 +219,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         HDC hdc = BeginPaint(hwnd, &ps);
 
         HBRUSH hBrush;
-        switch (Current_State) {
+        switch (Program_State) {
         case STATE_REACT:
             hBrush = hReactBrush;
             break;
@@ -227,28 +254,30 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
         wchar_t buffer[100] = { 0 }; // Buffer for any/all text
 
-        if (Current_State == STATE_RESULT) {
+        if (Program_State == STATE_RESULT) {
             SetTextColor(hdc, RGB(results_font_color[0], results_font_color[1], results_font_color[2]));
-            total_trial_number++;
+            trial_iteration++;
 
-            if (current_attempt < number_of_trials) {
+            if (current_attempt < averaging_trials) {
                 swprintf_s(buffer, 100, L"Last: %.2lfms\nComplete %d trials for average.\nTrials so far: %d",
-                    reaction_times[(current_attempt - 1 + number_of_trials) % number_of_trials], number_of_trials, total_trial_number);
+                    reaction_times[(current_attempt - 1 + averaging_trials) % averaging_trials], averaging_trials, trial_iteration);
             }
             else {
                 double total = 0;
-                for (int i = 0; i < number_of_trials; i++) {
+                for (int i = 0; i < averaging_trials; i++) {
                     total += reaction_times[i];
                 }
-                double average = total / number_of_trials;
+                double average = total / averaging_trials;
                 swprintf_s(buffer, 100, L"Last: %.2lfms\nAverage (last %d): %.2lfms\nTrials so far: %d",
-                    reaction_times[(current_attempt - 1) % number_of_trials], number_of_trials, average, total_trial_number);
+                    reaction_times[(current_attempt - 1) % averaging_trials], averaging_trials, average, trial_iteration);
             }
-            if (trial_logging_enabled == 1) AppendToLog(reaction_times[(current_attempt - 1 + number_of_trials) % number_of_trials], total_trial_number, trial_log_file_name, NULL);
+            if (trial_logging_enabled == 1){
+                AppendToLog(reaction_times[(current_attempt - 1 + averaging_trials) % averaging_trials], trial_iteration, log_paths.trial_log, NULL);
+            }
         }
-        else if (Current_State == STATE_EARLY) {
+        else if (Program_State == STATE_EARLY) {
             SetTextColor(hdc, RGB(early_font_color[0], early_font_color[1], early_font_color[2]));
-            swprintf_s(buffer, 100, L"Too early!\nTrials so far: %d", total_trial_number);
+            swprintf_s(buffer, 100, L"Too early!\nTrials so far: %d", trial_iteration);
         }
 
         // Calculate rectangle for the text and display it.
@@ -265,14 +294,14 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     case WM_TIMER: // Thank you windows for basically forcing a nested switch here
         switch (wParam) {
         case TIMER_READY:
-            Current_State = STATE_READY;
+            Program_State = STATE_READY;
             KillTimer(hwnd, TIMER_READY);
             SetTimer(hwnd, TIMER_REACT, GenerateRandomDelay(min_delay, max_delay), NULL);
             break;
 
         case TIMER_REACT:
-            if (Current_State == STATE_READY) {
-                Current_State = STATE_REACT;
+            if (Program_State == STATE_READY) {
+                Program_State = STATE_REACT;
                 QueryPerformanceCounter(&start_time); // Start reaction timer
                 InvalidateRect(hwnd, NULL, TRUE); // Force repaint
             }
@@ -283,8 +312,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             break;
 
         case TIMER_DEBOUNCE:  // Debounce reset
-            Input_Enabled.Mouse = true;
-            Input_Enabled.Keyboard = true;
+            input_status.mouse = true;
+            input_status.keyboard = true;
             debounce_active = false;
             break;
 
@@ -351,7 +380,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 // Utility Functions
 void HandleError(const wchar_t* error_message) { // Generic error handler
     MessageBoxW(NULL, error_message, L"Error", MB_OK);
-    if (debug_logging_enabled == 1) AppendToLog(0, 0, debug_log_file_name, error_message);
+    if (debug_logging_enabled == 1){
+        AppendToLog(0, 0, log_paths.debug_log, error_message);
+    }
     exit(1);
 }
 
@@ -364,11 +395,8 @@ void ValidateColors(const COLORREF color[]) {
 }
 
 void ValidateConfigSetting() { // Dumping ground for validating settings
-    if (resolution_width <= 0 || resolution_height <= 0) {
-        HandleError(L"Invalid resolution values in user.cfg");
-    }
-    if (min_delay <= 0 || max_delay <= 0 || max_delay < min_delay || virtual_debounce < 0 || early_reset_delay <= 0) {
-        HandleError(L"Invalid delay values in user.cfg");
+    if (max_delay < min_delay) {
+        HandleError(L"MaxDelay cannot be less than MinDelay in user.cfg");
     }
 }
 
@@ -462,7 +490,7 @@ void LoadColorConfiguration(const wchar_t* cfgPath, const wchar_t* sectionName, 
     ValidateColors(targetColorArray);
 }
 
-void LoadFontConfiguration(const wchar_t* cfgPath, wchar_t* targetFontName, size_t maxLength, int* fontSize, wchar_t* fontStyle, size_t fontStyleLength) {
+void LoadFontConfiguration(const wchar_t* cfgPath, wchar_t* targetFontName, size_t maxLength, unsigned int* fontSize, wchar_t* fontStyle, size_t fontStyleLength) {
     GetPrivateProfileStringW(L"Fonts", L"FontName", DEFAULT_FONT_NAME, targetFontName, (DWORD)maxLength, cfgPath);  // Retrieve font name
     RemoveComment(targetFontName);
     if (wcslen(targetFontName) == 0) {
@@ -476,9 +504,13 @@ void LoadFontConfiguration(const wchar_t* cfgPath, wchar_t* targetFontName, size
 }
 
 void LoadTrialConfiguration(const wchar_t* cfgPath) {
-    number_of_trials = GetPrivateProfileIntW(L"Trial", L"NumberOfTrials", DEFAULT_NUM_TRIALS, cfgPath);
-    if (number_of_trials <= 0) {
-        HandleError(L"Invalid number of trials in user.cfg");
+    averaging_trials = GetPrivateProfileIntW(L"Trial", L"AveragingTrials", DEFAULT_AVG_TRIALS, cfgPath);
+    if (averaging_trials <= 0) {
+        HandleError(L"Invalid number of averaging trials in user.cfg");
+    }
+    total_trials = GetPrivateProfileIntW(L"Trial", L"TotalTrials", DEFAULT_TOTAL_TRIALS, cfgPath);
+    if (total_trials <= 0) {
+        HandleError(L"Invalid number of total trials in user.cfg");
     }
 }
 
@@ -487,16 +519,8 @@ void LoadTextColorConfiguration(const wchar_t* cfgPath) {
     LoadColorConfiguration(cfgPath, L"Fonts", L"ResultsFontColor", results_font_color);
 }
 
-void AllocateMemoryForReactionTimes() {
-    size_t total_size = sizeof(double) * number_of_trials;
-    reaction_times = (double*)malloc(total_size);
-    if (reaction_times == NULL) {
-        HandleError(L"Failed to allocate memory for reaction times!");
-    }
-    memset(reaction_times, 0, total_size);
-}
-
 void LoadConfig() {
+    COLORREF ready_color[3], react_color[3], early_color[3], result_color[3];
     wchar_t cfg_path[MAX_PATH];
 
     if (!InitializeConfigFileAndPath(cfg_path, MAX_PATH)) {
@@ -519,7 +543,7 @@ void LoadConfig() {
     min_delay = GetPrivateProfileIntW(L"Delays", L"MinDelay", DEFAULT_MIN_DELAY, cfg_path);
     max_delay = GetPrivateProfileIntW(L"Delays", L"MaxDelay", DEFAULT_MAX_DELAY, cfg_path);
     early_reset_delay = GetPrivateProfileIntW(L"Delays", L"EarlyResetDelay", DEFAULT_EARLY_RESET_DELAY, cfg_path);
-    virtual_debounce = GetPrivateProfileIntW(L"Delays", L"VirtualDebounce", DEFAULT_VIRTUAL_DEBOUNCE, cfg_path);
+    input_status.virtual_debounce = GetPrivateProfileIntW(L"Delays", L"VirtualDebounce", DEFAULT_VIRTUAL_DEBOUNCE, cfg_path);
 
     raw_keyboard_enabled = GetPrivateProfileIntW(L"Toggles", L"RawKeyboardEnabled", DEFAULT_RAWKEYBOARDENABLE, cfg_path);
     raw_mouse_enabled = GetPrivateProfileIntW(L"Toggles", L"RawMouseEnabled", DEFAULT_RAWMOUSEENABLE, cfg_path);
@@ -533,7 +557,6 @@ void LoadConfig() {
     LoadTextColorConfiguration(cfg_path);
     LoadFontConfiguration(cfg_path, font_name, MAX_PATH, &font_size, font_style, MAX_PATH);
 
-    AllocateMemoryForReactionTimes(); // Would it be better to drop this?
 }
 
 void InitializeLogFileName(int log_type) { // log_type = 0 = trial log, log_type = 1 = debug log
@@ -550,15 +573,15 @@ void InitializeLogFileName(int log_type) { // log_type = 0 = trial log, log_type
 
     if (log_type) {
         wcsftime(timestamp, timestamp_length, L"%Y%m%d%H%M%S", tmp);  // Format YYYYMMDDHHMMSS
-        swprintf_s(debug_log_file_name, MAX_PATH, L"log\\DEBUG_Log_%s.log", timestamp);
-    }else{
+        swprintf_s(log_paths.debug_log, MAX_PATH, L"log\\DEBUG_Log_%s.log", timestamp);
+    } else {
         wcsftime(timestamp, timestamp_length, L"%Y%m%d%H%M%S", tmp);  // Format YYYYMMDDHHMMSS
-        swprintf_s(trial_log_file_name, MAX_PATH, L"log\\Log_%s.log", timestamp);
+        swprintf_s(log_paths.trial_log, MAX_PATH, L"log\\Log_%s.log", timestamp);
     }
 
 }
 
-bool AppendToLog(double reaction_time_value, int trial_number, wchar_t* logfile, const wchar_t* external_error_message) {  // Handles log file operations
+bool AppendToLog(double value, int iteration, wchar_t* logfile, const wchar_t* external_error_message) {  // Handles log file operations
     wchar_t exe_path[MAX_PATH];
     wchar_t log_file_path[MAX_PATH];
     wchar_t log_dir_path[MAX_PATH];
@@ -566,8 +589,7 @@ bool AppendToLog(double reaction_time_value, int trial_number, wchar_t* logfile,
     // Get the directory where the executable is running
     if (!GetModuleFileName(NULL, exe_path, MAX_PATH)) {
         HandleError(L"Failed to get module file name");
-    }
-    else {
+    } else {
         wchar_t* last_slash = wcsrchr(exe_path, '\\');
         if (last_slash) {
             *(last_slash + 1) = L'\0';
@@ -579,8 +601,7 @@ bool AppendToLog(double reaction_time_value, int trial_number, wchar_t* logfile,
         // Ensure log directory exists
         if (!CreateDirectory(log_dir_path, NULL) && GetLastError() != ERROR_ALREADY_EXISTS) {
             HandleError(L"Failed to create log directory");
-        }
-        else {
+        } else {
             // Create full path for the log file
             swprintf_s(log_file_path, MAX_PATH, L"%s%s", exe_path, logfile);
 
@@ -592,12 +613,12 @@ bool AppendToLog(double reaction_time_value, int trial_number, wchar_t* logfile,
                 _wcserror_s(error_message, sizeof(error_message) / sizeof(wchar_t), err);
                 HandleError(error_message);
             } else 
-            if (reaction_time_value == 0 && trial_number == 0) { // Hypothetically reaction_time_value == 0 && trial_number == 0 shouldn't be possible unless the values are forced
+            if (value == 0 && iteration == 0) { // Hypothetically value == 0 && iteration == 0 shouldn't be possible unless the values are forced
                 fwprintf(log_file, L"ERROR: %s\n", external_error_message); // Note: This only logs errors after we have already loaded the config
                 fclose(log_file);
                 return true;
             } else if (trial_logging_enabled) {
-                fwprintf(log_file, L"Trial %d: %f\n", trial_number, reaction_time_value);
+                fwprintf(log_file, L"Trial %d: %f\n", iteration, value);
                 fclose(log_file);
                 return true;
                     {
@@ -650,16 +671,16 @@ bool RegisterForRawInput(HWND hwnd, USHORT usage) {
 }
 
 void HandleInput(HWND hwnd, bool is_mouse_input) {   // Primary input logic is done here
-    if ((!Input_Enabled.Mouse && is_mouse_input) || (!Input_Enabled.Keyboard && !is_mouse_input)) {
+    if ((!input_status.mouse && is_mouse_input) || (!input_status.keyboard && !is_mouse_input)) {
         return;  // Ignore input if device is currently blocked
     }
-    if (Current_State == STATE_REACT) {
+    if (Program_State == STATE_REACT) {
         HandleReactClick(hwnd);
     }
-    else if ((Current_State == STATE_EARLY) || (Current_State == STATE_RESULT)) {
-        if ((Current_State == STATE_RESULT) && current_attempt == number_of_trials) {
+    else if ((Program_State == STATE_EARLY) || (Program_State == STATE_RESULT)) {
+        if ((Program_State == STATE_RESULT) && current_attempt == averaging_trials) { // This seems very odd, really not sure why it was done this way
             current_attempt = 0;
-            for (int i = 0; i < number_of_trials; i++) {
+            for (int i = 0; i < averaging_trials; i++) {
                 reaction_times[i] = 0;
             }
         }
@@ -668,11 +689,11 @@ void HandleInput(HWND hwnd, bool is_mouse_input) {   // Primary input logic is d
     else {
         HandleEarlyClick(hwnd);
     }
-    if ((virtual_debounce > 0) && (Input_Enabled.Mouse || Input_Enabled.Keyboard)) { // Block inputs if debounce is enabled and either input devices is active
-        Input_Enabled.Mouse = false;
-        Input_Enabled.Keyboard = false;
+    if ((input_status.virtual_debounce) && (input_status.mouse || input_status.keyboard)) { // Block inputs if debounce is enabled and either input devices is active
+        input_status.mouse = false;
+        input_status.keyboard = false;
         debounce_active = true;
-        SetTimer(hwnd, TIMER_DEBOUNCE, virtual_debounce, NULL);
+        SetTimer(hwnd, TIMER_DEBOUNCE, input_status.virtual_debounce, NULL);
     }
 }
 
@@ -744,7 +765,7 @@ void ResetLogic(HWND hwnd) {
     KillTimer(hwnd, TIMER_REACT);
     KillTimer(hwnd, TIMER_EARLY);
 
-    Current_State = STATE_READY;
+    Program_State = STATE_READY;
    
     SetTimer(hwnd, TIMER_READY, GenerateRandomDelay(min_delay,max_delay), NULL);
     InvalidateRect(hwnd, NULL, TRUE);
@@ -754,22 +775,22 @@ void HandleReactClick(HWND hwnd) {
     QueryPerformanceCounter(&end_time);
     double time_taken = ((double)(end_time.QuadPart - start_time.QuadPart) / frequency.QuadPart) * 1000;
 
-    reaction_times[current_attempt % number_of_trials] = time_taken;
+    reaction_times[current_attempt % averaging_trials] = time_taken;
     current_attempt++;
 
-    Current_State = STATE_RESULT;
+    Program_State = STATE_RESULT;
     InvalidateRect(hwnd, NULL, TRUE);
 }
 
 void HandleEarlyClick(HWND hwnd) {
-    Current_State = STATE_EARLY;
+    Program_State = STATE_EARLY;
     SetTimer(hwnd, TIMER_EARLY, early_reset_delay, NULL); // Early state eventually resets back to Ready state regardless of user input
     InvalidateRect(hwnd, NULL, TRUE);
 }
 
 void ResetAll(HWND hwnd) { // This isn't used but I guess it could be used to manually reset attempts, might break logging though
     current_attempt = 0;
-    for (int i = 0; i < number_of_trials; i++) {
+    for (int i = 0; i < averaging_trials; i++) {
         reaction_times[i] = 0;
     }
     ResetLogic(hwnd);
