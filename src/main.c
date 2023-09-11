@@ -1,6 +1,5 @@
 #define UNICODE
 #define _UNICODE
-
 #include <windows.h>
 #include <shlwapi.h>
 #include <stdlib.h>
@@ -183,31 +182,31 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         switch (LOWORD(lParam)) {
         case HTCLIENT: // In this section we use InputAllowed to change state of whether or not mouse can input commands
             if (!program_state.debounce_active) { program_state.input_mouse = true; }
-            SetCursor(LoadCursor(NULL, IDC_HAND)); // Switch to a hand cursor
+            SetCursor(LoadCursor(NULL, IDC_HAND)); // Hand cursor
             break;
         case HTLEFT:
         case HTRIGHT:
             program_state.input_mouse = false;
-            SetCursor(LoadCursor(NULL, IDC_SIZEWE)); // Left or right border (resize cursor)
+            SetCursor(LoadCursor(NULL, IDC_SIZEWE)); // Left or right border cursor
             break;
         case HTTOP:
         case HTBOTTOM:
             program_state.input_mouse = false;
-            SetCursor(LoadCursor(NULL, IDC_SIZENS)); // Top or bottom border (resize cursor)
+            SetCursor(LoadCursor(NULL, IDC_SIZENS)); // Top or bottom border cursor
             break;
         case HTTOPLEFT:
         case HTBOTTOMRIGHT:
             program_state.input_mouse = false;
-            SetCursor(LoadCursor(NULL, IDC_SIZENWSE)); // Top-left or bottom-right corner (diagonal resize cursor)
+            SetCursor(LoadCursor(NULL, IDC_SIZENWSE)); // Top-left or bottom-right corner cursor
             break;
         case HTTOPRIGHT:
         case HTBOTTOMLEFT:
             program_state.input_mouse = false;
-            SetCursor(LoadCursor(NULL, IDC_SIZENESW)); // Top-right or bottom-left corner (diagonal resize cursor)
+            SetCursor(LoadCursor(NULL, IDC_SIZENESW)); // Top-right or bottom-left corner cursor
             break;
         default:
             program_state.input_mouse = false;
-            SetCursor(LoadCursor(NULL, IDC_ARROW)); // Use the default cursor
+            SetCursor(LoadCursor(NULL, IDC_ARROW)); // Default cursor
             break;
         }
         return TRUE;
@@ -235,7 +234,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             break;
 
         default:
-            hBrush = ui.ready_brush; // Default to a known brush to avoid undefined behavior
+            hBrush = ui.ready_brush;
             HandleError(L"Invalid or undefined program state!");
             break;
         }
