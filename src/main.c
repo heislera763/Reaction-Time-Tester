@@ -9,83 +9,73 @@
 #include <stdbool.h>
 #include "main_definitions.h"
 
-// Putting everything relevant to LoadConfig() in this struct:
-/*
-    COLORREF ready_color[3], react_color[3], early_color[3], result_color[3];
-    wchar_t cfg_path[MAX_PATH];
-
-    hReadyBrush
-    hReactBrush
-    hEarlyBrush
-    hResultBrush
-
-    min_delay = GetPrivateProfileIntW(L"Delays", L"MinDelay", DEFAULT_MIN_DELAY, cfg_path);
-    max_delay = GetPrivateProfileIntW(L"Delays", L"MaxDelay", DEFAULT_MAX_DELAY, cfg_path);
-    early_reset_delay = GetPrivateProfileIntW(L"Delays", L"EarlyResetDelay", DEFAULT_EARLY_RESET_DELAY, cfg_path);
-    input_status.virtual_debounce = GetPrivateProfileIntW(L"Delays", L"VirtualDebounce", DEFAULT_VIRTUAL_DEBOUNCE, cfg_path);
-
-    raw_keyboard_enabled = GetPrivateProfileIntW(L"Toggles", L"RawKeyboardEnabled", DEFAULT_RAWKEYBOARDENABLE, cfg_path);
-    raw_mouse_enabled = GetPrivateProfileIntW(L"Toggles", L"RawMouseEnabled", DEFAULT_RAWMOUSEENABLE, cfg_path);
-    raw_input_debug_enabled = GetPrivateProfileIntW(L"Toggles", L"RawInputDebug", 0, cfg_path);
-    trial_logging_enabled = GetPrivateProfileIntW(L"Toggles", L"TrialLoggingEnabled", 0, cfg_path);
-    debug_logging_enabled = GetPrivateProfileIntW(L"Toggles", L"DebugLoggingEnabled", 0, cfg_path);
-
-    ValidateConfigSetting(); // Reminder: This is hardcoded to check for invalid settings, you must add those checks to this function directly
-
-    LoadTrialConfiguration(cfg_path);
-    LoadTextColorConfiguration(cfg_path);
-    LoadFontConfiguration(cfg_path, font_name, MAX_PATH, &font_size, font_style, MAX_PATH);
-*/
-
-
-
-
-
-// Configuration and Settings
-COLORREF early_font_color[3], results_font_color[3];
-
-int averaging_trials, total_trials;
-bool raw_keyboard_enabled, raw_mouse_enabled, raw_input_debug_enabled, trial_logging_enabled, debug_logging_enabled;
-
-wchar_t font_name[MAX_PATH], font_style[MAX_PATH];
-unsigned int font_size, resolution_width, resolution_height, min_delay, max_delay, early_reset_delay;
-
-
-double reaction_times[256] = {0}; // Hardcoded size for now, will be user configurable later
+// Configuration
+typedef struct {
+    COLORREF early_font[3];
+    COLORREF results_font[3];
+    int averaging_trials;
+    int total_trials;
+    bool raw_keyboard;
+    bool raw_mouse;
+    bool raw_input_debug;
+    bool trial_logging;
+    bool debug_logging;
+    wchar_t font_name[MAX_PATH];
+    wchar_t font_style[MAX_PATH];
+    unsigned int font_size;
+    unsigned int resolution_width;
+    unsigned int resolution_height;
+    unsigned int min_delay;
+    unsigned int max_delay;
+    unsigned int early_reset_delay;
+} Configuration;
 
 // Program State and Data
-enum {
-    STATE_READY,
-    STATE_REACT,
-    STATE_EARLY,
-    STATE_RESULT
-} Program_State = STATE_READY;
+typedef struct {
+    enum {
+        STATE_READY,
+        STATE_REACT,
+        STATE_EARLY,
+        STATE_RESULT
+    } state; // ##REVIEW## Bad variable name
 
-struct { // Stores the active/inactive state of input devices
-    bool mouse, keyboard, virtual_debounce;
-} input_status = {true, true, DEFAULT_VIRTUAL_DEBOUNCE};
+    bool input_mouse;
+    bool input_keyboard;
+    bool virtual_debounce;
+    bool debounce_active;
+    wchar_t trial_log_path[MAX_PATH];
+    wchar_t debug_log_path[MAX_PATH];
+    int current_attempt;
+    int trial_iteration;
+    int key_states[256];
 
-struct {
-    wchar_t trial_log[MAX_PATH];
-    wchar_t debug_log[MAX_PATH];
-} log_paths;
-
-int current_attempt = 0;
-int trial_iteration = 0;
-int key_states[256] = {0};
-LARGE_INTEGER start_time, end_time, frequency; // For high-resolution timing
-bool debounce_active = false; // Global indicator for whether or not program is halting inputs for virtual debounce feature
+    // High-resolution timing
+    LARGE_INTEGER start_time;
+    LARGE_INTEGER end_time;
+    LARGE_INTEGER frequency;
+} ProgramState;
 
 // UI and Rendering
-HBRUSH hReadyBrush, hReactBrush, hEarlyBrush, hResultBrush;
-HFONT hFont;
+typedef struct {
+    HBRUSH ready_brush;
+    HBRUSH react_brush;
+    HBRUSH early_brush;
+    HBRUSH result_brush;
+    HFONT font;
+} UI;
+
+Configuration config;
+ProgramState program_state = { .state = STATE_READY, .virtual_debounce = DEFAULT_VIRTUAL_DEBOUNCE };
+UI ui;
+
+double reaction_times[256] = {0}; // Hardcoded size for now, will be user configurable later. ##REVIEW## Does this belong in a stuct?
 
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
     // Voiding unused parameters
     (void)hPrevInstance;
     (void)lpCmdLine;
 
-    QueryPerformanceFrequency(&frequency);
+    QueryPerformanceFrequency(&program_state.frequency);
 
     const wchar_t CLASS_NAME[] = L"Sample Window Class";
 
@@ -104,14 +94,14 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     // Initialize brushes for painting.
     LoadConfig();
 
-    if (trial_logging_enabled == true) InitializeLogFileName(0);
-    if (debug_logging_enabled == true) InitializeLogFileName(1);
+    if (config.trial_logging == true) InitializeLogFileName(0);
+    if (config.debug_logging == true) InitializeLogFileName(1);
 
-    // Get the dimensions of the main display, then calculate the position to center the window
+    // Get the dimensions of the main display, then calculate the position to center the window ##REVIEW## Some stuff seems weird here
     int screen_width = GetSystemMetrics(SM_CXSCREEN);
     int screen_height = GetSystemMetrics(SM_CYSCREEN);
-    int window_width = resolution_width;
-    int window_height = resolution_height;
+    int window_width = config.resolution_width;
+    int window_height = config.resolution_height;
     int position_x = (screen_width - window_width) / 2;
     int position_y = (screen_height - window_height) / 2;
 
@@ -119,12 +109,12 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     HWND hwnd = CreateWindowExW(0, CLASS_NAME, L"Reaction Time Tester", WS_OVERLAPPEDWINDOW, position_x, position_y, window_width, window_height, NULL, NULL, hInstance, NULL);
 
     // Raw input
-    if (raw_keyboard_enabled == true) RegisterForRawInput(hwnd, 0x06);
-    if (raw_mouse_enabled == true) RegisterForRawInput(hwnd, 0x02);
-    if (raw_input_debug_enabled == true) {
+    if (config.raw_keyboard == true) RegisterForRawInput(hwnd, 0x06);
+    if (config.raw_mouse == true) RegisterForRawInput(hwnd, 0x02);
+    if (config.raw_input_debug == true) {
         wchar_t message[256];
         swprintf(message, sizeof(message) / sizeof(wchar_t), L"RawKeyboardEnable: %d\nRawMouseEnable: %d\nRegisterForRawKeyboardInput: %s\nRegisterForRawMouseInput: %s", 
-            raw_keyboard_enabled, raw_mouse_enabled, RegisterForRawInput(hwnd, 0x06) ? L"True" : L"False", RegisterForRawInput(hwnd, 0x02) ? L"True" : L"False");
+            config.raw_keyboard, config.raw_mouse, RegisterForRawInput(hwnd, 0x06) ? L"True" : L"False", RegisterForRawInput(hwnd, 0x02) ? L"True" : L"False");
         MessageBoxW(NULL, message, L"Raw Input Variables", MB_OK);
     }
 
@@ -139,25 +129,25 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     }
 
     // Switch to ready state
-    Program_State = STATE_READY;
+    program_state.state = STATE_READY;
 
     // Seed RNG and set initial timer
     srand((unsigned)time(NULL));
-    SetTimer(hwnd, TIMER_READY, GenerateRandomDelay(min_delay, max_delay), NULL);
+    SetTimer(hwnd, TIMER_READY, GenerateRandomDelay(config.min_delay, config.max_delay), NULL);
 
     // Prepare font
     int font_weight = FW_REGULAR;
     BOOL italics_enabled = FALSE;
-    if (wcscmp(font_style, L"Bold") == 0) {
+    if (wcscmp(config.font_style, L"Bold") == 0) {
         font_weight = FW_BOLD;
     }
-    else if (wcscmp(font_style, L"Italic") == 0) {
+    else if (wcscmp(config.font_style, L"Italic") == 0) {
         italics_enabled = TRUE;
     }
-    hFont = CreateFontW(font_size, 0, 0, 0, font_weight, italics_enabled, FALSE, FALSE, ANSI_CHARSET,
+    ui.font = CreateFontW(config.font_size, 0, 0, 0, font_weight, italics_enabled, FALSE, FALSE, ANSI_CHARSET,
         OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
-        DEFAULT_PITCH | FF_DONTCARE, font_name);
-    if (!hFont) {
+        DEFAULT_PITCH | FF_DONTCARE, config.font_name);
+    if (!ui.font) {
         HandleError(L"Failed to create font.");
     }
 
@@ -184,31 +174,31 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     case WM_SETCURSOR:
         switch (LOWORD(lParam)) {
         case HTCLIENT: // In this section we use InputAllowed to change state of whether or not mouse can input commands
-            if (!debounce_active) { input_status.mouse = true; }
+            if (!program_state.debounce_active) { program_state.input_mouse = true; }
             SetCursor(LoadCursor(NULL, IDC_HAND)); // Switch to a hand cursor
             break;
         case HTLEFT:
         case HTRIGHT:
-            input_status.mouse = false;
+            program_state.input_mouse = false;
             SetCursor(LoadCursor(NULL, IDC_SIZEWE)); // Left or right border (resize cursor)
             break;
         case HTTOP:
         case HTBOTTOM:
-            input_status.mouse = false;
+            program_state.input_mouse = false;
             SetCursor(LoadCursor(NULL, IDC_SIZENS)); // Top or bottom border (resize cursor)
             break;
         case HTTOPLEFT:
         case HTBOTTOMRIGHT:
-            input_status.mouse = false;
+            program_state.input_mouse = false;
             SetCursor(LoadCursor(NULL, IDC_SIZENWSE)); // Top-left or bottom-right corner (diagonal resize cursor)
             break;
         case HTTOPRIGHT:
         case HTBOTTOMLEFT:
-            input_status.mouse = false;
+            program_state.input_mouse = false;
             SetCursor(LoadCursor(NULL, IDC_SIZENESW)); // Top-right or bottom-left corner (diagonal resize cursor)
             break;
         default:
-            input_status.mouse = false;
+            program_state.input_mouse = false;
             SetCursor(LoadCursor(NULL, IDC_ARROW)); // Use the default cursor
             break;
         }
@@ -219,25 +209,25 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         HDC hdc = BeginPaint(hwnd, &ps);
 
         HBRUSH hBrush;
-        switch (Program_State) {
+        switch (program_state.state) {
         case STATE_REACT:
-            hBrush = hReactBrush;
+            hBrush = ui.react_brush;
             break;
 
         case STATE_EARLY:
-            hBrush = hEarlyBrush;
+            hBrush = ui.early_brush;
             break;
 
         case STATE_RESULT:
-            hBrush = hResultBrush;
+            hBrush = ui.result_brush;
             break;
 
         case STATE_READY:
-            hBrush = hReadyBrush;
+            hBrush = ui.ready_brush;
             break;
 
         default:
-            hBrush = hReadyBrush; // Default to a known brush to avoid undefined behavior
+            hBrush = ui.ready_brush; // Default to a known brush to avoid undefined behavior
             HandleError(L"Invalid or undefined program state!");
             break;
         }
@@ -250,34 +240,34 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         // Display text
         SetBkMode(hdc, TRANSPARENT);
         SetTextColor(hdc, RGB(255, 255, 255));
-        SelectObject(hdc, hFont);
+        SelectObject(hdc, ui.font);
 
         wchar_t buffer[100] = { 0 }; // Buffer for any/all text
 
-        if (Program_State == STATE_RESULT) {
-            SetTextColor(hdc, RGB(results_font_color[0], results_font_color[1], results_font_color[2]));
-            trial_iteration++;
+        if (program_state.state == STATE_RESULT) {
+            SetTextColor(hdc, RGB(config.results_font[0], config.results_font[1], config.results_font[2]));
+            program_state.trial_iteration++;
 
-            if (current_attempt < averaging_trials) {
+            if (program_state.current_attempt < config.averaging_trials) {
                 swprintf_s(buffer, 100, L"Last: %.2lfms\nComplete %d trials for average.\nTrials so far: %d",
-                    reaction_times[(current_attempt - 1 + averaging_trials) % averaging_trials], averaging_trials, trial_iteration);
+                    reaction_times[(program_state.current_attempt - 1 + config.averaging_trials) % config.averaging_trials], config.averaging_trials, program_state.trial_iteration);
             }
             else {
                 double total = 0;
-                for (int i = 0; i < averaging_trials; i++) {
+                for (int i = 0; i < config.averaging_trials; i++) {
                     total += reaction_times[i];
                 }
-                double average = total / averaging_trials;
+                double average = total / config.averaging_trials;
                 swprintf_s(buffer, 100, L"Last: %.2lfms\nAverage (last %d): %.2lfms\nTrials so far: %d",
-                    reaction_times[(current_attempt - 1) % averaging_trials], averaging_trials, average, trial_iteration);
+                    reaction_times[(program_state.current_attempt - 1) % config.averaging_trials], config.averaging_trials, average, program_state.trial_iteration);
             }
-            if (trial_logging_enabled == 1){
-                AppendToLog(reaction_times[(current_attempt - 1 + averaging_trials) % averaging_trials], trial_iteration, log_paths.trial_log, NULL);
+            if (config.trial_logging == 1){
+                AppendToLog(reaction_times[(program_state.current_attempt - 1 + config.averaging_trials) % config.averaging_trials], program_state.trial_iteration, program_state.trial_log_path, NULL);
             }
         }
-        else if (Program_State == STATE_EARLY) {
-            SetTextColor(hdc, RGB(early_font_color[0], early_font_color[1], early_font_color[2]));
-            swprintf_s(buffer, 100, L"Too early!\nTrials so far: %d", trial_iteration);
+        else if (program_state.state == STATE_EARLY) {
+            SetTextColor(hdc, RGB(config.early_font[0], config.early_font[1], config.early_font[2]));
+            swprintf_s(buffer, 100, L"Too early!\nTrials so far: %d", program_state.trial_iteration);
         }
 
         // Calculate rectangle for the text and display it.
@@ -294,15 +284,15 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     case WM_TIMER: // Thank you windows for basically forcing a nested switch here
         switch (wParam) {
         case TIMER_READY:
-            Program_State = STATE_READY;
+            program_state.state = STATE_READY;
             KillTimer(hwnd, TIMER_READY);
-            SetTimer(hwnd, TIMER_REACT, GenerateRandomDelay(min_delay, max_delay), NULL);
+            SetTimer(hwnd, TIMER_REACT, GenerateRandomDelay(config.min_delay, config.max_delay), NULL);
             break;
 
         case TIMER_REACT:
-            if (Program_State == STATE_READY) {
-                Program_State = STATE_REACT;
-                QueryPerformanceCounter(&start_time); // Start reaction timer
+            if (program_state.state == STATE_READY) {
+                program_state.state = STATE_REACT;
+                QueryPerformanceCounter(&program_state.start_time); // Start reaction timer
                 InvalidateRect(hwnd, NULL, TRUE); // Force repaint
             }
             break;
@@ -312,9 +302,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             break;
 
         case TIMER_DEBOUNCE:  // Debounce reset
-            input_status.mouse = true;
-            input_status.keyboard = true;
-            debounce_active = false;
+            program_state.input_mouse = true;
+            program_state.input_keyboard = true;
+            program_state.debounce_active = false;
             break;
 
         }
@@ -338,10 +328,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
         RAWINPUT* raw = (RAWINPUT*)lpb;
 
-        if (raw->header.dwType == RIM_TYPEKEYBOARD && raw_keyboard_enabled == true) {
+        if (raw->header.dwType == RIM_TYPEKEYBOARD && config.raw_keyboard == true) {
             HandleRawKeyboardInput(raw, hwnd);
         }
-        else if (raw->header.dwType == RIM_TYPEMOUSE && raw_mouse_enabled == true) {
+        else if (raw->header.dwType == RIM_TYPEMOUSE && config.raw_mouse == true) {
             HandleRawMouseInput(raw, hwnd);
         }
 
@@ -352,7 +342,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     // Handle generic keyboard input
     case WM_KEYDOWN:
     case WM_KEYUP:
-        if (raw_keyboard_enabled == false) {
+        if (config.raw_keyboard == false) {
             HandleGenericKeyboardInput(hwnd);
         }
         break;
@@ -360,7 +350,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     // Handle generic mouse input
     case WM_LBUTTONDOWN:
     case WM_LBUTTONUP:
-        if (raw_mouse_enabled == false) {
+        if (config.raw_mouse == false) {
             HandleGenericMouseInput(hwnd);
         }
         break;
@@ -380,8 +370,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 // Utility Functions
 void HandleError(const wchar_t* error_message) { // Generic error handler
     MessageBoxW(NULL, error_message, L"Error", MB_OK);
-    if (debug_logging_enabled == 1){
-        AppendToLog(0, 0, log_paths.debug_log, error_message);
+    if (config.debug_logging == 1){
+        AppendToLog(0, 0, program_state.debug_log_path, error_message);
     }
     exit(1);
 }
@@ -394,8 +384,8 @@ void ValidateColors(const COLORREF color[]) {
     }
 }
 
-void ValidateConfigSetting() { // Dumping ground for validating settings
-    if (max_delay < min_delay) {
+void ValidateConfigSetting() { // Dumping ground for validating settings ##REVIEW## I will probably delete this, unless I decided to make these settings editable during runtime
+    if (config.max_delay < config.min_delay) {
         HandleError(L"MaxDelay cannot be less than MinDelay in user.cfg");
     }
 }
@@ -426,11 +416,11 @@ int GenerateRandomDelay(int min, int max) { // RNG stuff
     return min + (r / buckets);
 }
 
-void BrushCleanup() { // Hardcoded to delete only these brushes, should probably replace with a more modular approach. Also, are these conditionals needed?
-    if (hReadyBrush) DeleteObject(hReadyBrush);
-    if (hReactBrush) DeleteObject(hReactBrush);
-    if (hEarlyBrush) DeleteObject(hEarlyBrush);
-    if (hResultBrush) DeleteObject(hResultBrush);
+void BrushCleanup() { // ##REVIEW## Hardcoded to delete only these brushes and very single use. Also, are these conditionals needed?
+    if (ui.ready_brush) DeleteObject(ui.ready_brush);
+    if (ui.react_brush) DeleteObject(ui.react_brush);
+    if (ui.early_brush) DeleteObject(ui.early_brush);
+    if (ui.result_brush) DeleteObject(ui.result_brush);
 }
 
 
@@ -504,19 +494,19 @@ void LoadFontConfiguration(const wchar_t* cfgPath, wchar_t* targetFontName, size
 }
 
 void LoadTrialConfiguration(const wchar_t* cfgPath) {
-    averaging_trials = GetPrivateProfileIntW(L"Trial", L"AveragingTrials", DEFAULT_AVG_TRIALS, cfgPath);
-    if (averaging_trials <= 0) {
+    config.averaging_trials = GetPrivateProfileIntW(L"Trial", L"AveragingTrials", DEFAULT_AVG_TRIALS, cfgPath);
+    if (config.averaging_trials <= 0) {
         HandleError(L"Invalid number of averaging trials in user.cfg");
     }
-    total_trials = GetPrivateProfileIntW(L"Trial", L"TotalTrials", DEFAULT_TOTAL_TRIALS, cfgPath);
-    if (total_trials <= 0) {
+    config.total_trials = GetPrivateProfileIntW(L"Trial", L"TotalTrials", DEFAULT_TOTAL_TRIALS, cfgPath); // ##REVIEW## Unused variable
+    if (config.total_trials <= 0) {
         HandleError(L"Invalid number of total trials in user.cfg");
     }
 }
 
 void LoadTextColorConfiguration(const wchar_t* cfgPath) {
-    LoadColorConfiguration(cfgPath, L"Fonts", L"EarlyFontColor", early_font_color);
-    LoadColorConfiguration(cfgPath, L"Fonts", L"ResultsFontColor", results_font_color);
+    LoadColorConfiguration(cfgPath, L"Fonts", L"EarlyFontColor", config.early_font);
+    LoadColorConfiguration(cfgPath, L"Fonts", L"ResultsFontColor", config.results_font);
 }
 
 void LoadConfig() {
@@ -527,35 +517,35 @@ void LoadConfig() {
         exit(1);
     }
 
-    resolution_width = GetPrivateProfileIntW(L"Resolution", L"ResolutionWidth", DEFAULT_RESOLUTION_WIDTH, cfg_path);
-    resolution_height = GetPrivateProfileIntW(L"Resolution", L"ResolutionHeight", DEFAULT_RESOLUTION_HEIGHT, cfg_path);
+    config.resolution_width = GetPrivateProfileIntW(L"Resolution", L"ResolutionWidth", DEFAULT_RESOLUTION_WIDTH, cfg_path);
+    config.resolution_height = GetPrivateProfileIntW(L"Resolution", L"ResolutionHeight", DEFAULT_RESOLUTION_HEIGHT, cfg_path);
 
     LoadColorConfiguration(cfg_path, L"Colors", L"ReadyColor", ready_color);
     LoadColorConfiguration(cfg_path, L"Colors", L"ReactColor", react_color);
     LoadColorConfiguration(cfg_path, L"Colors", L"EarlyColor", early_color);
     LoadColorConfiguration(cfg_path, L"Colors", L"ResultColor", result_color);
 
-    hReadyBrush = CreateSolidBrush(RGB(ready_color[0], ready_color[1], ready_color[2]));
-    hReactBrush = CreateSolidBrush(RGB(react_color[0], react_color[1], react_color[2]));
-    hEarlyBrush = CreateSolidBrush(RGB(early_color[0], early_color[1], early_color[2]));
-    hResultBrush = CreateSolidBrush(RGB(result_color[0], result_color[1], result_color[2]));
+    ui.ready_brush = CreateSolidBrush(RGB(ready_color[0], ready_color[1], ready_color[2]));
+    ui.react_brush = CreateSolidBrush(RGB(react_color[0], react_color[1], react_color[2]));
+    ui.early_brush = CreateSolidBrush(RGB(early_color[0], early_color[1], early_color[2]));
+    ui.result_brush = CreateSolidBrush(RGB(result_color[0], result_color[1], result_color[2]));
 
-    min_delay = GetPrivateProfileIntW(L"Delays", L"MinDelay", DEFAULT_MIN_DELAY, cfg_path);
-    max_delay = GetPrivateProfileIntW(L"Delays", L"MaxDelay", DEFAULT_MAX_DELAY, cfg_path);
-    early_reset_delay = GetPrivateProfileIntW(L"Delays", L"EarlyResetDelay", DEFAULT_EARLY_RESET_DELAY, cfg_path);
-    input_status.virtual_debounce = GetPrivateProfileIntW(L"Delays", L"VirtualDebounce", DEFAULT_VIRTUAL_DEBOUNCE, cfg_path);
+    config.min_delay = GetPrivateProfileIntW(L"Delays", L"MinDelay", DEFAULT_MIN_DELAY, cfg_path);
+    config.max_delay = GetPrivateProfileIntW(L"Delays", L"MaxDelay", DEFAULT_MAX_DELAY, cfg_path);
+    config.early_reset_delay = GetPrivateProfileIntW(L"Delays", L"EarlyResetDelay", DEFAULT_EARLY_RESET_DELAY, cfg_path);
+    program_state.virtual_debounce = GetPrivateProfileIntW(L"Delays", L"VirtualDebounce", DEFAULT_VIRTUAL_DEBOUNCE, cfg_path);
 
-    raw_keyboard_enabled = GetPrivateProfileIntW(L"Toggles", L"RawKeyboardEnabled", DEFAULT_RAWKEYBOARDENABLE, cfg_path);
-    raw_mouse_enabled = GetPrivateProfileIntW(L"Toggles", L"RawMouseEnabled", DEFAULT_RAWMOUSEENABLE, cfg_path);
-    raw_input_debug_enabled = GetPrivateProfileIntW(L"Toggles", L"RawInputDebug", 0, cfg_path);
-    trial_logging_enabled = GetPrivateProfileIntW(L"Toggles", L"TrialLoggingEnabled", 0, cfg_path);
-    debug_logging_enabled = GetPrivateProfileIntW(L"Toggles", L"DebugLoggingEnabled", 0, cfg_path);
+    config.raw_keyboard = GetPrivateProfileIntW(L"Toggles", L"RawKeyboardEnabled", DEFAULT_RAWKEYBOARDENABLE, cfg_path);
+    config.raw_mouse = GetPrivateProfileIntW(L"Toggles", L"RawMouseEnabled", DEFAULT_RAWMOUSEENABLE, cfg_path);
+    config.raw_input_debug = GetPrivateProfileIntW(L"Toggles", L"RawInputDebug", 0, cfg_path);
+    config.trial_logging = GetPrivateProfileIntW(L"Toggles", L"TrialLoggingEnabled", 0, cfg_path);
+    config.debug_logging = GetPrivateProfileIntW(L"Toggles", L"DebugLoggingEnabled", 0, cfg_path);
 
     ValidateConfigSetting(); // Reminder: This is hardcoded to check for invalid settings, you must add those checks to this function directly
 
     LoadTrialConfiguration(cfg_path);
     LoadTextColorConfiguration(cfg_path);
-    LoadFontConfiguration(cfg_path, font_name, MAX_PATH, &font_size, font_style, MAX_PATH);
+    LoadFontConfiguration(cfg_path, config.font_name, MAX_PATH, &config.font_size, config.font_style, MAX_PATH);
 
 }
 
@@ -573,10 +563,10 @@ void InitializeLogFileName(int log_type) { // log_type = 0 = trial log, log_type
 
     if (log_type) {
         wcsftime(timestamp, timestamp_length, L"%Y%m%d%H%M%S", tmp);  // Format YYYYMMDDHHMMSS
-        swprintf_s(log_paths.debug_log, MAX_PATH, L"log\\DEBUG_Log_%s.log", timestamp);
+        swprintf_s(program_state.debug_log_path, MAX_PATH, L"log\\DEBUG_Log_%s.log", timestamp);
     } else {
         wcsftime(timestamp, timestamp_length, L"%Y%m%d%H%M%S", tmp);  // Format YYYYMMDDHHMMSS
-        swprintf_s(log_paths.trial_log, MAX_PATH, L"log\\Log_%s.log", timestamp);
+        swprintf_s(program_state.trial_log_path, MAX_PATH, L"log\\Log_%s.log", timestamp);
     }
 
 }
@@ -617,7 +607,7 @@ bool AppendToLog(double value, int iteration, wchar_t* logfile, const wchar_t* e
                 fwprintf(log_file, L"ERROR: %s\n", external_error_message); // Note: This only logs errors after we have already loaded the config
                 fclose(log_file);
                 return true;
-            } else if (trial_logging_enabled) {
+            } else if (config.trial_logging) {
                 fwprintf(log_file, L"Trial %d: %f\n", iteration, value);
                 fclose(log_file);
                 return true;
@@ -671,16 +661,16 @@ bool RegisterForRawInput(HWND hwnd, USHORT usage) {
 }
 
 void HandleInput(HWND hwnd, bool is_mouse_input) {   // Primary input logic is done here
-    if ((!input_status.mouse && is_mouse_input) || (!input_status.keyboard && !is_mouse_input)) {
+    if ((!program_state.input_mouse && is_mouse_input) || (!program_state.input_keyboard && !is_mouse_input)) {
         return;  // Ignore input if device is currently blocked
     }
-    if (Program_State == STATE_REACT) {
+    if (program_state.state == STATE_REACT) {
         HandleReactClick(hwnd);
     }
-    else if ((Program_State == STATE_EARLY) || (Program_State == STATE_RESULT)) {
-        if ((Program_State == STATE_RESULT) && current_attempt == averaging_trials) { // This seems very odd, really not sure why it was done this way
-            current_attempt = 0;
-            for (int i = 0; i < averaging_trials; i++) {
+    else if ((program_state.state == STATE_EARLY) || (program_state.state == STATE_RESULT)) {
+        if ((program_state.state == STATE_RESULT) && program_state.current_attempt == config.averaging_trials) { // This seems very odd, really not sure why it was done this way
+            program_state.current_attempt = 0;
+            for (int i = 0; i < config.averaging_trials; i++) {
                 reaction_times[i] = 0;
             }
         }
@@ -689,15 +679,15 @@ void HandleInput(HWND hwnd, bool is_mouse_input) {   // Primary input logic is d
     else {
         HandleEarlyClick(hwnd);
     }
-    if ((input_status.virtual_debounce) && (input_status.mouse || input_status.keyboard)) { // Block inputs if debounce is enabled and either input devices is active
-        input_status.mouse = false;
-        input_status.keyboard = false;
-        debounce_active = true;
-        SetTimer(hwnd, TIMER_DEBOUNCE, input_status.virtual_debounce, NULL);
+    if ((program_state.virtual_debounce) && (program_state.input_mouse || program_state.input_keyboard)) { // Block inputs if debounce is enabled and either input devices is active
+        program_state.input_mouse = false;
+        program_state.input_keyboard = false;
+        program_state.debounce_active = true;
+        SetTimer(hwnd, TIMER_DEBOUNCE, program_state.virtual_debounce, NULL);
     }
 }
 
-void HandleGenericKeyboardInput(HWND hwnd) {
+void HandleGenericKeyboardInput(HWND hwnd) { // ##REVIEW## Seems like we have an in-between function here
     for (int vkey = 0; vkey <= 255; vkey++) {
         UpdateKeyState(vkey, hwnd);
     }
@@ -706,12 +696,12 @@ void HandleGenericKeyboardInput(HWND hwnd) {
 void HandleRawKeyboardInput(RAWINPUT* raw, HWND hwnd) {
     int vkey = raw->data.keyboard.VKey;
 
-    if (raw->data.keyboard.Flags == RI_KEY_MAKE && IsAlphanumeric(vkey) && !key_states[vkey]) {
+    if (raw->data.keyboard.Flags == RI_KEY_MAKE && IsAlphanumeric(vkey) && !program_state.key_states[vkey]) {
         HandleInput(hwnd, false);
-        key_states[vkey] = true;
+        program_state.key_states[vkey] = true;
     }
     else if (raw->data.keyboard.Flags == RI_KEY_BREAK) {
-        key_states[vkey] = false;
+        program_state.key_states[vkey] = false;
     }
 }
 
@@ -748,12 +738,12 @@ bool IsAlphanumeric(int vkey) {
 void UpdateKeyState(int vkey, HWND hwnd) {
     if (IsAlphanumeric(vkey)) {
         bool is_key_pressed = GetAsyncKeyState(vkey) & 0x8000;
-        if (is_key_pressed && !key_states[vkey]) {
+        if (is_key_pressed && !program_state.key_states[vkey]) {
             HandleInput(hwnd, false);
-            key_states[vkey] = 1;
+            program_state.key_states[vkey] = 1;
         }
-        else if (!is_key_pressed && key_states[vkey]) {
-            key_states[vkey] = 0;
+        else if (!is_key_pressed && program_state.key_states[vkey]) {
+            program_state.key_states[vkey] = 0;
         }
     }
 }
@@ -765,33 +755,35 @@ void ResetLogic(HWND hwnd) {
     KillTimer(hwnd, TIMER_REACT);
     KillTimer(hwnd, TIMER_EARLY);
 
-    Program_State = STATE_READY;
+    program_state.state = STATE_READY;
    
-    SetTimer(hwnd, TIMER_READY, GenerateRandomDelay(min_delay,max_delay), NULL);
+    SetTimer(hwnd, TIMER_READY, GenerateRandomDelay(config.min_delay,config.max_delay), NULL);
     InvalidateRect(hwnd, NULL, TRUE);
 }
 
 void HandleReactClick(HWND hwnd) {
-    QueryPerformanceCounter(&end_time);
-    double time_taken = ((double)(end_time.QuadPart - start_time.QuadPart) / frequency.QuadPart) * 1000;
+    QueryPerformanceCounter(&program_state.end_time);
+    double time_taken = ((double)(program_state.end_time.QuadPart - program_state.start_time.QuadPart) / program_state.frequency.QuadPart) * 1000;
 
-    reaction_times[current_attempt % averaging_trials] = time_taken;
-    current_attempt++;
+    reaction_times[program_state.current_attempt % config.averaging_trials] = time_taken;
+    program_state.current_attempt++;
 
-    Program_State = STATE_RESULT;
+    program_state.state = STATE_RESULT;
     InvalidateRect(hwnd, NULL, TRUE);
 }
 
 void HandleEarlyClick(HWND hwnd) {
-    Program_State = STATE_EARLY;
-    SetTimer(hwnd, TIMER_EARLY, early_reset_delay, NULL); // Early state eventually resets back to Ready state regardless of user input
+    program_state.state = STATE_EARLY;
+    SetTimer(hwnd, TIMER_EARLY, config.early_reset_delay, NULL); // Early state eventually resets back to Ready state regardless of user input
     InvalidateRect(hwnd, NULL, TRUE);
 }
 
-void ResetAll(HWND hwnd) { // This isn't used but I guess it could be used to manually reset attempts, might break logging though
-    current_attempt = 0;
-    for (int i = 0; i < averaging_trials; i++) {
+/*
+void ResetAll(HWND hwnd) { // ##REVIEW## This isn't used but I guess it could be used to manually reset attempts, might break logging though
+    program_state.current_attempt = 0;
+    for (int i = 0; i < config.averaging_trials; i++) {
         reaction_times[i] = 0;
     }
     ResetLogic(hwnd);
 }
+*/
