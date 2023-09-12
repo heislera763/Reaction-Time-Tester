@@ -171,6 +171,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
         DispatchMessage(&msg);
     }
 
+    // ##REVIEW## Just delete the whole struct?
     if (ui.ready_brush) DeleteObject(ui.ready_brush);
     if (ui.react_brush) DeleteObject(ui.react_brush);
     if (ui.early_brush) DeleteObject(ui.early_brush);
@@ -268,7 +269,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
             if (program_state.current_attempt < config.averaging_trials) {
                 swprintf_s(buffer, 100, L"Last: %.2lfms\nComplete %d trials for average.\nTrials so far: %d",
-                    program_state.reaction_times[(program_state.current_attempt - 1 + config.averaging_trials) % config.averaging_trials], config.averaging_trials, program_state.trial_iteration);
+                    program_state.reaction_times[(program_state.current_attempt - 1 + config.averaging_trials) % config.averaging_trials],
+                         config.averaging_trials, program_state.trial_iteration);
             }
             else {
                 double total = 0;
@@ -293,14 +295,16 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         RECT text_rectangle;
         SetRectEmpty(&text_rectangle);
         DrawTextW(hdc, buffer, -1, &text_rectangle, DT_CALCRECT | DT_WORDBREAK);
+
+        // ##REVIEW## Text doesn't center vertically (Pretty sure GPT mangled this at some point)
         RECT centered_rectangle = rect;
-        centered_rectangle.top += (rect.bottom - rect.top - (text_rectangle.bottom - text_rectangle.top)) / 2; // Text doesn't center vertically (Newline not being accounted for?)
+        centered_rectangle.top += (rect.bottom - rect.top - (text_rectangle.bottom - text_rectangle.top)) / 2; 
         DrawTextW(hdc, buffer, -1, &centered_rectangle, DT_CENTER | DT_WORDBREAK);
 
         EndPaint(hwnd, &ps);
     } break;
 
-    case WM_TIMER: // Thank you windows for basically forcing a nested switch here
+    case WM_TIMER:
         switch (wParam) {
         case TIMER_READY:
             program_state.game_state = STATE_READY;
@@ -676,7 +680,7 @@ void HandleInput(HWND hwnd, bool is_mouse_input) {   // Primary input logic is d
         HandleReactClick(hwnd);
     }
     else if ((program_state.game_state == STATE_EARLY) || (program_state.game_state == STATE_RESULT)) {
-        if ((program_state.game_state == STATE_RESULT) && program_state.current_attempt == config.averaging_trials) { // This seems very odd, really not sure why it was done this way
+        if ((program_state.game_state == STATE_RESULT) && program_state.current_attempt == config.averaging_trials) { // ##REVIEW## Double check this
             program_state.current_attempt = 0;
             for (int i = 0; i < config.averaging_trials; i++) {
                 program_state.reaction_times[i] = 0;
@@ -687,7 +691,7 @@ void HandleInput(HWND hwnd, bool is_mouse_input) {   // Primary input logic is d
     else {
         HandleEarlyClick(hwnd);
     }
-    if ((program_state.virtual_debounce) && (program_state.input_mouse || program_state.input_keyboard)) { // Block inputs if debounce is enabled and either input devices is active
+    if ((program_state.virtual_debounce) && (program_state.input_mouse || program_state.input_keyboard)) { // Activate debounce if enabled
         program_state.input_mouse = false;
         program_state.input_keyboard = false;
         program_state.debounce_active = true;
