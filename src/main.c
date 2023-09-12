@@ -36,13 +36,13 @@ typedef struct {
 
 // Program State and Data
 typedef struct {
-    // Program State ##REVIEW## Very bad variable names/Maybe this structure is just bad
+    // Game State
     enum {
         STATE_READY,
         STATE_REACT,
         STATE_EARLY,
         STATE_RESULT
-    } state;
+    } game_state;
     int current_attempt;
     int trial_iteration;
 
@@ -73,8 +73,15 @@ typedef struct {
     HFONT font;
 } UI;
 
+typedef struct{
+    Configuration;
+    ProgramState;
+    UI;
+} MainData;
+
+//Declare structs, pointers, and variables ##REVIEW## I would prefer this to be in my main scope
 Configuration config;
-ProgramState program_state = { .state = STATE_READY, .virtual_debounce = DEFAULT_VIRTUAL_DEBOUNCE, .reaction_times = {0}};
+ProgramState program_state = { .game_state = STATE_READY, .virtual_debounce = DEFAULT_VIRTUAL_DEBOUNCE, .reaction_times = {0}};
 UI ui;
 
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
@@ -136,7 +143,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     }
 
     // Switch to ready state
-    program_state.state = STATE_READY;
+    program_state.game_state = STATE_READY;
 
     // Seed RNG and set initial timer
     srand((unsigned)time(NULL));
@@ -181,7 +188,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     case WM_SETCURSOR:
         switch (LOWORD(lParam)) {
         case HTCLIENT: // In this section we use InputAllowed to change state of whether or not mouse can input commands
-            if (!program_state.debounce_active) { program_state.input_mouse = true; }
+            if (!program_state.debounce_active) {
+                program_state.input_mouse = true;
+            }
             SetCursor(LoadCursor(NULL, IDC_HAND)); // Hand cursor
             break;
         case HTLEFT:
@@ -216,7 +225,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         HDC hdc = BeginPaint(hwnd, &ps);
 
         HBRUSH hBrush;
-        switch (program_state.state) {
+        switch (program_state.game_state) {
         case STATE_REACT:
             hBrush = ui.react_brush;
             break;
@@ -251,7 +260,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
         wchar_t buffer[100] = { 0 }; // Buffer for any/all text
 
-        if (program_state.state == STATE_RESULT) {
+        if (program_state.game_state == STATE_RESULT) {
             SetTextColor(hdc, RGB(config.results_font[0], config.results_font[1], config.results_font[2]));
             program_state.trial_iteration++;
 
@@ -273,7 +282,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
                     program_state.trial_iteration, program_state.trial_log_path, NULL);
             }
         }
-        else if (program_state.state == STATE_EARLY) {
+        else if (program_state.game_state == STATE_EARLY) {
             SetTextColor(hdc, RGB(config.early_font[0], config.early_font[1], config.early_font[2]));
             swprintf_s(buffer, 100, L"Too early!\nTrials so far: %d", program_state.trial_iteration);
         }
@@ -292,14 +301,14 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     case WM_TIMER: // Thank you windows for basically forcing a nested switch here
         switch (wParam) {
         case TIMER_READY:
-            program_state.state = STATE_READY;
+            program_state.game_state = STATE_READY;
             KillTimer(hwnd, TIMER_READY);
             SetTimer(hwnd, TIMER_REACT, GenerateRandomDelay(config.min_delay, config.max_delay), NULL);
             break;
 
         case TIMER_REACT:
-            if (program_state.state == STATE_READY) {
-                program_state.state = STATE_REACT;
+            if (program_state.game_state == STATE_READY) {
+                program_state.game_state = STATE_REACT;
                 QueryPerformanceCounter(&program_state.start_time); // Start reaction timer
                 InvalidateRect(hwnd, NULL, TRUE); // Force repaint
             }
@@ -433,7 +442,7 @@ void BrushCleanup() { // ##REVIEW## Hardcoded to delete only these brushes and v
 
 
 // Configuration and setup functions
-bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength) { // Initializes paths and attempts to copy default.cfg to user.cfg
+bool InitializeConfigFileAndPath(wchar_t* cfg_path, size_t max_length) { // Initializes paths and attempts to copy default.cfg to user.cfg
     wchar_t exe_path[MAX_PATH];
     wchar_t default_cfg_path[MAX_PATH];
 
@@ -444,12 +453,12 @@ bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength) { // Initia
     wchar_t* last_slash = wcsrchr(exe_path, '\\');  // Find the last directory separator
     if (last_slash) *(last_slash + 1) = L'\0';  // Null-terminate to get directory path
 
-    if (swprintf_s(cfgPath, maxLength, L"%s/config/%s", exe_path, L"user.cfg") < 0 ||
+    if (swprintf_s(cfg_path, max_length, L"%s/config/%s", exe_path, L"user.cfg") < 0 ||
         swprintf_s(default_cfg_path, MAX_PATH, L"%s/config/%s", exe_path, L"default.cfg") < 0) {
         HandleError(L"Failed to create config paths");
     }
 
-    if (GetFileAttributesW(cfgPath) == INVALID_FILE_ATTRIBUTES) {  // If user.cfg doesn't exist, copy from default.cfg
+    if (GetFileAttributesW(cfg_path) == INVALID_FILE_ATTRIBUTES) {  // If user.cfg doesn't exist, copy from default.cfg
         FILE* default_file;
         errno_t err1 = _wfopen_s(&default_file, default_cfg_path, L"rb");
         if (err1 != 0 || !default_file) {
@@ -457,7 +466,7 @@ bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength) { // Initia
         }
 
         FILE* new_file;
-        errno_t err2 = _wfopen_s(&new_file, cfgPath, L"wb");
+        errno_t err2 = _wfopen_s(&new_file, cfg_path, L"wb");
         if (err2 != 0 || !new_file) {
             fclose(default_file);
             HandleError(L"Failed to create user.cfg");
@@ -476,45 +485,45 @@ bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength) { // Initia
     return true;
 }
 
-void LoadColorConfiguration(const wchar_t* cfgPath, const wchar_t* sectionName, const wchar_t* colorName, const COLORREF* targetColorArray) { // Load RGB
+void LoadColorConfiguration(const wchar_t* cfg_path, const wchar_t* section_name, const wchar_t* colorName, const COLORREF* target_color_array) { // Load RGB
     wchar_t buffer[255];
-    GetPrivateProfileStringW(sectionName, colorName, L"", buffer, sizeof(buffer) / sizeof(wchar_t), cfgPath);  // Retrieve color configuration as comma-separated RGB values
+    GetPrivateProfileStringW(section_name, colorName, L"", buffer, sizeof(buffer) / sizeof(wchar_t), cfg_path);  // Retrieve color configuration as comma-separated RGB values
 
     if (wcslen(buffer) == 0) {
         HandleError(L"Failed to read color configuration");
     }
 
-    swscanf_s(buffer, L"%d,%d,%d", &targetColorArray[0], &targetColorArray[1], &targetColorArray[2]);  // Extract individual RGB values
-    ValidateColors(targetColorArray);
+    swscanf_s(buffer, L"%d,%d,%d", &target_color_array[0], &target_color_array[1], &target_color_array[2]);  // Extract individual RGB values
+    ValidateColors(target_color_array);
 }
 
-void LoadFontConfiguration(const wchar_t* cfgPath, wchar_t* targetFontName, size_t maxLength, unsigned int* fontSize, wchar_t* fontStyle, size_t fontStyleLength) {
-    GetPrivateProfileStringW(L"Fonts", L"FontName", DEFAULT_FONT_NAME, targetFontName, (DWORD)maxLength, cfgPath);  // Retrieve font name
-    RemoveComment(targetFontName);
-    if (wcslen(targetFontName) == 0) {
+void LoadFontConfiguration(const wchar_t* cfg_path, wchar_t* target_font_name, size_t max_length, unsigned int* font_size, wchar_t* font_style, size_t font_style_length) {
+    GetPrivateProfileStringW(L"Fonts", L"FontName", DEFAULT_FONT_NAME, target_font_name, (DWORD)max_length, cfg_path);  // Retrieve font name
+    RemoveComment(target_font_name);
+    if (wcslen(target_font_name) == 0) {
         HandleError(L"Failed to read font configuration");
     }
 
-    *fontSize = GetPrivateProfileIntW(L"Fonts", L"FontSize", DEFAULT_FONT_SIZE, cfgPath);
+    *font_size = GetPrivateProfileIntW(L"Fonts", L"FontSize", DEFAULT_FONT_SIZE, cfg_path);
 
-    GetPrivateProfileStringW(L"Fonts", L"FontStyle", DEFAULT_FONT_STYLE, fontStyle, (DWORD)fontStyleLength, cfgPath);
-    RemoveComment(fontStyle);
+    GetPrivateProfileStringW(L"Fonts", L"FontStyle", DEFAULT_FONT_STYLE, font_style, (DWORD)font_style_length, cfg_path);
+    RemoveComment(font_style);
 }
 
-void LoadTrialConfiguration(const wchar_t* cfgPath) {
-    config.averaging_trials = GetPrivateProfileIntW(L"Trial", L"AveragingTrials", DEFAULT_AVG_TRIALS, cfgPath);
+void LoadTrialConfiguration(const wchar_t* cfg_path) {
+    config.averaging_trials = GetPrivateProfileIntW(L"Trial", L"AveragingTrials", DEFAULT_AVG_TRIALS, cfg_path);
     if (config.averaging_trials <= 0) {
         HandleError(L"Invalid number of averaging trials in user.cfg");
     }
-    config.total_trials = GetPrivateProfileIntW(L"Trial", L"TotalTrials", DEFAULT_TOTAL_TRIALS, cfgPath); // ##REVIEW## Unused variable
+    config.total_trials = GetPrivateProfileIntW(L"Trial", L"TotalTrials", DEFAULT_TOTAL_TRIALS, cfg_path); // ##REVIEW## Unused variable
     if (config.total_trials <= 0) {
         HandleError(L"Invalid number of total trials in user.cfg");
     }
 }
 
-void LoadTextColorConfiguration(const wchar_t* cfgPath) {
-    LoadColorConfiguration(cfgPath, L"Fonts", L"EarlyFontColor", config.early_font);
-    LoadColorConfiguration(cfgPath, L"Fonts", L"ResultsFontColor", config.results_font);
+void LoadTextColorConfiguration(const wchar_t* cfg_path) {
+    LoadColorConfiguration(cfg_path, L"Fonts", L"EarlyFontColor", config.early_font);
+    LoadColorConfiguration(cfg_path, L"Fonts", L"ResultsFontColor", config.results_font);
 }
 
 void LoadConfig() {
@@ -672,11 +681,11 @@ void HandleInput(HWND hwnd, bool is_mouse_input) {   // Primary input logic is d
     if ((!program_state.input_mouse && is_mouse_input) || (!program_state.input_keyboard && !is_mouse_input)) {
         return;  // Ignore input if device is currently blocked
     }
-    if (program_state.state == STATE_REACT) {
+    if (program_state.game_state == STATE_REACT) {
         HandleReactClick(hwnd);
     }
-    else if ((program_state.state == STATE_EARLY) || (program_state.state == STATE_RESULT)) {
-        if ((program_state.state == STATE_RESULT) && program_state.current_attempt == config.averaging_trials) { // This seems very odd, really not sure why it was done this way
+    else if ((program_state.game_state == STATE_EARLY) || (program_state.game_state == STATE_RESULT)) {
+        if ((program_state.game_state == STATE_RESULT) && program_state.current_attempt == config.averaging_trials) { // This seems very odd, really not sure why it was done this way
             program_state.current_attempt = 0;
             for (int i = 0; i < config.averaging_trials; i++) {
                 program_state.reaction_times[i] = 0;
@@ -763,7 +772,7 @@ void ResetLogic(HWND hwnd) {
     KillTimer(hwnd, TIMER_REACT);
     KillTimer(hwnd, TIMER_EARLY);
 
-    program_state.state = STATE_READY;
+    program_state.game_state = STATE_READY;
    
     SetTimer(hwnd, TIMER_READY, GenerateRandomDelay(config.min_delay,config.max_delay), NULL);
     InvalidateRect(hwnd, NULL, TRUE);
@@ -776,12 +785,12 @@ void HandleReactClick(HWND hwnd) {
     program_state.reaction_times[program_state.current_attempt % config.averaging_trials] = time_taken;
     program_state.current_attempt++;
 
-    program_state.state = STATE_RESULT;
+    program_state.game_state = STATE_RESULT;
     InvalidateRect(hwnd, NULL, TRUE);
 }
 
 void HandleEarlyClick(HWND hwnd) {
-    program_state.state = STATE_EARLY;
+    program_state.game_state = STATE_EARLY;
     SetTimer(hwnd, TIMER_EARLY, config.early_reset_delay, NULL); // Early state eventually resets back to Ready state regardless of user input
     InvalidateRect(hwnd, NULL, TRUE);
 }

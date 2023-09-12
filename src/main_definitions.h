@@ -19,10 +19,10 @@
 #define DEFAULT_RESOLUTION_HEIGHT 720
 
 // Forward declarations for window procedure and other functions.
-LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParamg);
 
 // Utility functions
-void HandleError(const wchar_t* errorMessage);
+void HandleError(const wchar_t* error_message);
 void ValidateColors(const COLORREF color[]);
 void ValidateConfigSetting();
 void RemoveComment(wchar_t* str);
@@ -30,11 +30,11 @@ int  GenerateRandomDelay(int min, int max);
 void BrushCleanup();
 
 // Configuration and setup functions
-bool InitializeConfigFileAndPath(wchar_t* cfgPath, size_t maxLength);
-void LoadColorConfiguration(const wchar_t* cfgPath, const wchar_t* sectionName, const wchar_t* colorName, const COLORREF* targetColorArray);
-void LoadFontConfiguration(const wchar_t* cfgPath, wchar_t* targetFontName, size_t maxLength, unsigned int* fontSize, wchar_t* fontStyle, size_t fontStyleLength);
-void LoadTrialConfiguration(const wchar_t* cfgPath);
-void LoadTextColorConfiguration(const wchar_t* cfgPath);
+bool InitializeConfigFileAndPath(wchar_t* cfg_path, size_t max_length);
+void LoadColorConfiguration(const wchar_t* cfg_path, const wchar_t* section_name, const wchar_t* color_name, const COLORREF* target_color_array);
+void LoadFontConfiguration(const wchar_t* cfg_path, wchar_t* target_font_name, size_t max_length, unsigned int* font_size, wchar_t* font_style, size_t font_style_length);
+void LoadTrialConfiguration(const wchar_t* cfg_path);
+void LoadTextColorConfiguration(const wchar_t* cfg_path);
 void AllocateMemoryForReactionTimes();
 void LoadConfig();
 void InitializeLogFileName(int log_type);
