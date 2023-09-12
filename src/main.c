@@ -543,7 +543,6 @@ void LoadConfig() {
         HandleError(L"MaxDelay cannot be less than MinDelay in user.cfg");
     }
 
-
     program_state.virtual_debounce = GetPrivateProfileIntW(L"Delays", L"VirtualDebounce", DEFAULT_VIRTUAL_DEBOUNCE, cfg_path);
 
     config.raw_keyboard = GetPrivateProfileIntW(L"Toggles", L"RawKeyboardEnabled", DEFAULT_RAWKEYBOARDENABLE, cfg_path);
