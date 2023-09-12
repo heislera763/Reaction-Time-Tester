@@ -138,7 +138,6 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 
     if (hwnd == NULL) {
         MessageBoxW(NULL, L"Failed to create window", L"Error", MB_OK);
-        BrushCleanup();
         return 0;
     }
 
@@ -172,7 +171,10 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
         DispatchMessage(&msg);
     }
 
-    BrushCleanup();
+    if (ui.ready_brush) DeleteObject(ui.ready_brush);
+    if (ui.react_brush) DeleteObject(ui.react_brush);
+    if (ui.early_brush) DeleteObject(ui.early_brush);
+    if (ui.result_brush) DeleteObject(ui.result_brush);
 
     return 0;
 }
@@ -401,12 +403,6 @@ void ValidateColors(const COLORREF color[]) {
     }
 }
 
-void ValidateConfigSetting() { // Dumping ground for validating settings ##REVIEW## I will probably delete this, unless I decided to make these settings editable during runtime
-    if (config.max_delay < config.min_delay) {
-        HandleError(L"MaxDelay cannot be less than MinDelay in user.cfg");
-    }
-}
-
 void RemoveComment(wchar_t* str) { // Removes comments and trailing spaces from strings read from .cfg files
     wchar_t* semicolon_position = wcschr(str, L';');
     if (semicolon_position) {
@@ -432,14 +428,6 @@ int GenerateRandomDelay(int min, int max) { // RNG stuff
 
     return min + (r / buckets);
 }
-
-void BrushCleanup() { // ##REVIEW## Hardcoded to delete only these brushes and very single use. Also, are these conditionals needed?
-    if (ui.ready_brush) DeleteObject(ui.ready_brush);
-    if (ui.react_brush) DeleteObject(ui.react_brush);
-    if (ui.early_brush) DeleteObject(ui.early_brush);
-    if (ui.result_brush) DeleteObject(ui.result_brush);
-}
-
 
 // Configuration and setup functions
 bool InitializeConfigFileAndPath(wchar_t* cfg_path, size_t max_length) { // Initializes paths and attempts to copy default.cfg to user.cfg
@@ -550,6 +538,12 @@ void LoadConfig() {
     config.min_delay = GetPrivateProfileIntW(L"Delays", L"MinDelay", DEFAULT_MIN_DELAY, cfg_path);
     config.max_delay = GetPrivateProfileIntW(L"Delays", L"MaxDelay", DEFAULT_MAX_DELAY, cfg_path);
     config.early_reset_delay = GetPrivateProfileIntW(L"Delays", L"EarlyResetDelay", DEFAULT_EARLY_RESET_DELAY, cfg_path);
+
+    if (config.max_delay < config.min_delay) {
+        HandleError(L"MaxDelay cannot be less than MinDelay in user.cfg");
+    }
+
+
     program_state.virtual_debounce = GetPrivateProfileIntW(L"Delays", L"VirtualDebounce", DEFAULT_VIRTUAL_DEBOUNCE, cfg_path);
 
     config.raw_keyboard = GetPrivateProfileIntW(L"Toggles", L"RawKeyboardEnabled", DEFAULT_RAWKEYBOARDENABLE, cfg_path);
