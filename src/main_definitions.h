@@ -21,7 +21,17 @@
 // Forward declarations for window procedure and other functions.
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParamg);
 
+
+
+// WIP Functions ##REVIEW## Need some cleanup here later
+void SetBrush(HBRUSH* brush);
+void SetMouseInputState(bool state);
+void DisplayLogic(HDC* hdc, HWND* hwnd, HBRUSH* brush);
+void GameStateLogic(WPARAM* wParam, HWND* hwnd);
+void GameInput(HWND* hwnd, LPARAM* lParam);
+
 // Utility functions
+void InitializeRTT(HWND hwnd);
 void HandleError(const wchar_t* error_message);
 void ValidateColors(const COLORREF color[]);
 void RemoveComment(wchar_t* str);

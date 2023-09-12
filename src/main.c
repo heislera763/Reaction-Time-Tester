@@ -71,13 +71,17 @@ typedef struct {
     HBRUSH early_brush;
     HBRUSH result_brush;
     HFONT font;
+    int font_weight;
+    BOOL italics_enabled;
 } UI;
 
+/* ##REVIEW## A 3rd level to the structs feels clumsy
 typedef struct{
     Configuration;
     ProgramState;
     UI;
 } MainData;
+*/
 
 //Declare structs, pointers, and variables ##REVIEW## I would prefer this to be in my main scope
 Configuration config;
@@ -85,11 +89,10 @@ ProgramState program_state = { .game_state = STATE_READY, .virtual_debounce = DE
 UI ui;
 
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
+    
     // Voiding unused parameters
     (void)hPrevInstance;
     (void)lpCmdLine;
-
-    QueryPerformanceFrequency(&program_state.frequency);
 
     const wchar_t CLASS_NAME[] = L"Sample Window Class";
 
@@ -105,32 +108,17 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
         HandleError(L"Failed to register window class");
     }
 
-    // Initialize brushes for painting.
     LoadConfig();
 
-    if (config.trial_logging == true) InitializeLogFileName(0);
-    if (config.debug_logging == true) InitializeLogFileName(1);
-
-    // Get the dimensions of the main display, then calculate the position to center the window ##REVIEW## Some stuff seems weird here
-    int screen_width = GetSystemMetrics(SM_CXSCREEN);
-    int screen_height = GetSystemMetrics(SM_CYSCREEN);
-    int window_width = config.resolution_width;
-    int window_height = config.resolution_height;
-    int position_x = (screen_width - window_width) / 2;
-    int position_y = (screen_height - window_height) / 2;
+    // Get the dimensions of the main display, then calculate the position to center the window
+    // ##REVIEW## Some stuff seems weird here, Also I would like to move it to somewhere outside of main
+    int position_x = (GetSystemMetrics(SM_CXSCREEN) - GetSystemMetrics(SM_CYSCREEN)) / 2;
+    int position_y = (GetSystemMetrics(SM_CYSCREEN) - config.resolution_height) / 2;
 
     // Create main window centered on the main display
-    HWND hwnd = CreateWindowExW(0, CLASS_NAME, L"Reaction Time Tester", WS_OVERLAPPEDWINDOW, position_x, position_y, window_width, window_height, NULL, NULL, hInstance, NULL);
+    HWND hwnd = CreateWindowExW(0, CLASS_NAME, L"Reaction Time Tester", WS_OVERLAPPEDWINDOW, position_x, position_y, config.resolution_width, config.resolution_height, NULL, NULL, hInstance, NULL);
 
-    // Raw input
-    if (config.raw_keyboard == true) RegisterForRawInput(hwnd, 0x06);
-    if (config.raw_mouse == true) RegisterForRawInput(hwnd, 0x02);
-    if (config.raw_input_debug == true) {
-        wchar_t message[256];
-        swprintf(message, sizeof(message) / sizeof(wchar_t), L"RawKeyboardEnable: %d\nRawMouseEnable: %d\nRegisterForRawKeyboardInput: %s\nRegisterForRawMouseInput: %s", 
-            config.raw_keyboard, config.raw_mouse, RegisterForRawInput(hwnd, 0x06) ? L"True" : L"False", RegisterForRawInput(hwnd, 0x02) ? L"True" : L"False");
-        MessageBoxW(NULL, message, L"Raw Input Variables", MB_OK);
-    }
+    InitializeRTT(hwnd);
 
     // Display the window.
     ShowWindow(hwnd, nCmdShow);
@@ -141,41 +129,16 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
         return 0;
     }
 
-    // Switch to ready state
-    program_state.game_state = STATE_READY;
-
     // Seed RNG and set initial timer
     srand((unsigned)time(NULL));
     SetTimer(hwnd, TIMER_READY, GenerateRandomDelay(config.min_delay, config.max_delay), NULL);
 
-    // Prepare font
-    int font_weight = FW_REGULAR;
-    BOOL italics_enabled = FALSE;
-    if (wcscmp(config.font_style, L"Bold") == 0) {
-        font_weight = FW_BOLD;
-    }
-    else if (wcscmp(config.font_style, L"Italic") == 0) {
-        italics_enabled = TRUE;
-    }
-    ui.font = CreateFontW(config.font_size, 0, 0, 0, font_weight, italics_enabled, FALSE, FALSE, ANSI_CHARSET,
-        OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
-        DEFAULT_PITCH | FF_DONTCARE, config.font_name);
-    if (!ui.font) {
-        HandleError(L"Failed to create font.");
-    }
-
-    // Enter Windows message loop.
+    // Enter Windows message loop. ##REVIEW## This is important and I don't 100% get it
     MSG msg = {0};
     while (GetMessage(&msg, NULL, 0, 0)) {
         TranslateMessage(&msg);
         DispatchMessage(&msg);
     }
-
-    // ##REVIEW## Just delete the whole struct?
-    if (ui.ready_brush) DeleteObject(ui.ready_brush);
-    if (ui.react_brush) DeleteObject(ui.react_brush);
-    if (ui.early_brush) DeleteObject(ui.early_brush);
-    if (ui.result_brush) DeleteObject(ui.result_brush);
 
     return 0;
 }
@@ -183,88 +146,132 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
     case WM_CREATE:
-    {
         LoadAndSetIcon(hwnd);
-    }
     break;
 
     case WM_SETCURSOR:
-        switch (LOWORD(lParam)) {
+        switch (LOWORD(lParam)) { // ##REVIEW## End goal is to remove mouse state from this section entirely, using utility function as stop gap, maybe pointless
         case HTCLIENT: // In this section we use InputAllowed to change state of whether or not mouse can input commands
-            if (!program_state.debounce_active) {
-                program_state.input_mouse = true;
-            }
+            SetMouseInputState(true);
             SetCursor(LoadCursor(NULL, IDC_HAND)); // Hand cursor
             break;
         case HTLEFT:
         case HTRIGHT:
-            program_state.input_mouse = false;
+            SetMouseInputState(false);
             SetCursor(LoadCursor(NULL, IDC_SIZEWE)); // Left or right border cursor
             break;
         case HTTOP:
         case HTBOTTOM:
-            program_state.input_mouse = false;
+            SetMouseInputState(false);
             SetCursor(LoadCursor(NULL, IDC_SIZENS)); // Top or bottom border cursor
             break;
         case HTTOPLEFT:
         case HTBOTTOMRIGHT:
-            program_state.input_mouse = false;
+            SetMouseInputState(false);
             SetCursor(LoadCursor(NULL, IDC_SIZENWSE)); // Top-left or bottom-right corner cursor
             break;
         case HTTOPRIGHT:
         case HTBOTTOMLEFT:
-            program_state.input_mouse = false;
+            SetMouseInputState(false);
             SetCursor(LoadCursor(NULL, IDC_SIZENESW)); // Top-right or bottom-left corner cursor
             break;
         default:
-            program_state.input_mouse = false;
+            SetMouseInputState(false);
             SetCursor(LoadCursor(NULL, IDC_ARROW)); // Default cursor
             break;
         }
         return TRUE;
 
-    case WM_PAINT: {
+    case WM_PAINT: 
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hwnd, &ps);
-
         HBRUSH hBrush;
-        switch (program_state.game_state) {
-        case STATE_REACT:
-            hBrush = ui.react_brush;
-            break;
 
-        case STATE_EARLY:
-            hBrush = ui.early_brush;
-            break;
+        SetBrush(&hBrush);
+        DisplayLogic(&hdc, &hwnd, &hBrush);
+        EndPaint(hwnd, &ps);
+        break;
 
-        case STATE_RESULT:
-            hBrush = ui.result_brush;
-            break;
+    case WM_TIMER:
+        GameStateLogic(&wParam, &hwnd); // ##REVIEW## Any better way?
+        break;
 
-        case STATE_READY:
-            hBrush = ui.ready_brush;
-            break;
+    case WM_INPUT:
+        GameInput(&hwnd, &lParam);
+        break;
 
-        default:
-            hBrush = ui.ready_brush;
-            HandleError(L"Invalid or undefined program state!");
-            break;
-        }
+    // Handle generic keyboard input
+    case WM_KEYDOWN:
+    case WM_KEYUP:
+            HandleGenericKeyboardInput(hwnd);
+        break;
 
+    // Handle generic mouse input
+    case WM_LBUTTONDOWN:
+    case WM_LBUTTONUP:
+            HandleGenericMouseInput(hwnd);
+        break;
+
+    case WM_DESTROY:
+        PostQuitMessage(0);
+        return 0;
+
+    default:
+        return DefWindowProc(hwnd, uMsg, wParam, lParam);
+    }
+
+    return 0;
+}
+
+
+
+// WIP Functions ##REVIEW## Need some cleanup here later
+void SetMouseInputState(bool state){ // ##REVIEW## Questionable conditional
+    if (!program_state.debounce_active) {
+        program_state.input_mouse = state;
+    }
+}
+
+void SetBrush(HBRUSH* brush){
+    switch (program_state.game_state) {
+    case STATE_REACT:
+        *brush = ui.react_brush;
+        break;
+
+    case STATE_EARLY:
+        *brush = ui.early_brush;
+        break;
+
+    case STATE_RESULT:
+        *brush = ui.result_brush;
+        break;
+
+    case STATE_READY:
+        *brush = ui.ready_brush;
+        break;
+
+    default:
+        *brush = ui.ready_brush;
+        HandleError(L"Invalid or undefined program state!");
+        break;
+    }
+}
+
+void DisplayLogic(HDC* hdc, HWND* hwnd, HBRUSH* brush){
         // Paint the entire window
         RECT rect;
-        GetClientRect(hwnd, &rect);
-        FillRect(hdc, &rect, hBrush);
+        GetClientRect(*hwnd, &rect);
+        FillRect(*hdc, &rect, *brush);
 
         // Display text
-        SetBkMode(hdc, TRANSPARENT);
-        SetTextColor(hdc, RGB(255, 255, 255));
-        SelectObject(hdc, ui.font);
+        SetBkMode(*hdc, TRANSPARENT);
+        SetTextColor(*hdc, RGB(255, 255, 255));
+        SelectObject(*hdc, ui.font);
 
-        wchar_t buffer[100] = { 0 }; // Buffer for any/all text
+        wchar_t buffer[100] = {0};
 
-        if (program_state.game_state == STATE_RESULT) {
-            SetTextColor(hdc, RGB(config.results_font[0], config.results_font[1], config.results_font[2]));
+        if (program_state.game_state == STATE_RESULT) { // ##REVIEW## This is probably the hardest to follow code in the script
+            SetTextColor(*hdc, RGB(config.results_font[0], config.results_font[1], config.results_font[2]));
             program_state.trial_iteration++;
 
             if (program_state.current_attempt < config.averaging_trials) {
@@ -287,41 +294,39 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             }
         }
         else if (program_state.game_state == STATE_EARLY) {
-            SetTextColor(hdc, RGB(config.early_font[0], config.early_font[1], config.early_font[2]));
+            SetTextColor(*hdc, RGB(config.early_font[0], config.early_font[1], config.early_font[2]));
             swprintf_s(buffer, 100, L"Too early!\nTrials so far: %d", program_state.trial_iteration);
         }
 
-        // Calculate rectangle for the text and display it.
+         // Calculate rectangle for the text and display it.
         RECT text_rectangle;
         SetRectEmpty(&text_rectangle);
-        DrawTextW(hdc, buffer, -1, &text_rectangle, DT_CALCRECT | DT_WORDBREAK);
+        DrawTextW(*hdc, buffer, -1, &text_rectangle, DT_CALCRECT | DT_WORDBREAK);
 
         // ##REVIEW## Text doesn't center vertically (Pretty sure GPT mangled this at some point)
         RECT centered_rectangle = rect;
         centered_rectangle.top += (rect.bottom - rect.top - (text_rectangle.bottom - text_rectangle.top)) / 2; 
-        DrawTextW(hdc, buffer, -1, &centered_rectangle, DT_CENTER | DT_WORDBREAK);
+        DrawTextW(*hdc, buffer, -1, &centered_rectangle, DT_CENTER | DT_WORDBREAK);
+};
 
-        EndPaint(hwnd, &ps);
-    } break;
-
-    case WM_TIMER:
-        switch (wParam) {
+void GameStateLogic(WPARAM* wParam, HWND* hwnd) {
+        switch (*wParam) {
         case TIMER_READY:
             program_state.game_state = STATE_READY;
-            KillTimer(hwnd, TIMER_READY);
-            SetTimer(hwnd, TIMER_REACT, GenerateRandomDelay(config.min_delay, config.max_delay), NULL);
+            KillTimer(*hwnd, TIMER_READY);
+            SetTimer(*hwnd, TIMER_REACT, GenerateRandomDelay(config.min_delay, config.max_delay), NULL);
             break;
 
         case TIMER_REACT:
             if (program_state.game_state == STATE_READY) {
                 program_state.game_state = STATE_REACT;
                 QueryPerformanceCounter(&program_state.start_time); // Start reaction timer
-                InvalidateRect(hwnd, NULL, TRUE); // Force repaint
+                InvalidateRect(*hwnd, NULL, TRUE); // Force repaint
             }
             break;
 
         case TIMER_EARLY:
-            ResetLogic(hwnd); // Reset the game after showing the "too early" screen
+            ResetLogic(*hwnd); // Reset the game after showing the "too early" screen
             break;
 
         case TIMER_DEBOUNCE:  // Debounce reset
@@ -331,66 +336,72 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             break;
 
         }
-        break;
-
-    case WM_INPUT:
-    {
-        UINT dwSize = 0;
-        GetRawInputData((HRAWINPUT)lParam, RID_INPUT, NULL, &dwSize, sizeof(RAWINPUTHEADER));
-        LPBYTE lpb = (LPBYTE)malloc(dwSize * sizeof(BYTE));
-
-        if (lpb == NULL) {
-            return 0;
-        }
-
-        if (GetRawInputData((HRAWINPUT)lParam, RID_INPUT, lpb, &dwSize, sizeof(RAWINPUTHEADER)) != dwSize) {
-            HandleError(L"GetRawInputData did not return correct size!");
-            free(lpb);
-            return 0;
-        }
-
-        RAWINPUT* raw = (RAWINPUT*)lpb;
-
-        if (raw->header.dwType == RIM_TYPEKEYBOARD && config.raw_keyboard == true) {
-            HandleRawKeyboardInput(raw, hwnd);
-        }
-        else if (raw->header.dwType == RIM_TYPEMOUSE && config.raw_mouse == true) {
-            HandleRawMouseInput(raw, hwnd);
-        }
-
-        free(lpb);
-    }
-    break;
-
-    // Handle generic keyboard input
-    case WM_KEYDOWN:
-    case WM_KEYUP:
-        if (config.raw_keyboard == false) {
-            HandleGenericKeyboardInput(hwnd);
-        }
-        break;
-
-    // Handle generic mouse input
-    case WM_LBUTTONDOWN:
-    case WM_LBUTTONUP:
-        if (config.raw_mouse == false) {
-            HandleGenericMouseInput(hwnd);
-        }
-        break;
-
-    case WM_DESTROY:
-        PostQuitMessage(0);
-        return 0;
-
-    default:
-        return DefWindowProc(hwnd, uMsg, wParam, lParam);
-    }
-
-    return 0;
 }
 
+void GameInput(HWND* hwnd, LPARAM* lParam) {
+    UINT dwSize = 0;
+    GetRawInputData((HRAWINPUT)*lParam, RID_INPUT, NULL, &dwSize, sizeof(RAWINPUTHEADER));
+    LPBYTE lpb = (LPBYTE)malloc(dwSize * sizeof(BYTE));
+
+    if (lpb == NULL) {
+        return;
+    }
+
+    if (GetRawInputData((HRAWINPUT)*lParam, RID_INPUT, lpb, &dwSize, sizeof(RAWINPUTHEADER)) != dwSize) {
+        HandleError(L"GetRawInputData did not return correct size!");
+        free(lpb);
+    }
+
+    RAWINPUT* raw = (RAWINPUT*)lpb;
+
+    if (raw->header.dwType == RIM_TYPEKEYBOARD && config.raw_keyboard == true) {
+        HandleRawKeyboardInput(raw, *hwnd);
+    }
+    else if (raw->header.dwType == RIM_TYPEMOUSE && config.raw_mouse == true) {
+        HandleRawMouseInput(raw, *hwnd);
+    }
+
+    free(lpb);
+}
 
 // Utility Functions
+void InitializeRTT(HWND hwnd) { // ##REVIEW## Hopefully we can most of the setup in here cleanly, does it need hwnd though? Probably no harm in it?
+    QueryPerformanceFrequency(&program_state.frequency);
+
+    if (config.trial_logging == true) InitializeLogFileName(0);
+    if (config.debug_logging == true) InitializeLogFileName(1);
+
+    // Switch to ready state
+    program_state.game_state = STATE_READY;
+
+    // Prepare font
+    ui.font_weight = FW_REGULAR;
+    ui.italics_enabled = FALSE;
+    if (wcscmp(config.font_style, L"Bold") == 0) {
+        ui.font_weight = FW_BOLD;
+    }
+    else if (wcscmp(config.font_style, L"Italic") == 0) {
+        ui.italics_enabled = TRUE;
+    }
+    ui.font = CreateFontW(config.font_size, 0, 0, 0, ui.font_weight, ui.italics_enabled, FALSE, FALSE, ANSI_CHARSET,
+        OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
+        DEFAULT_PITCH | FF_DONTCARE, config.font_name);
+    if (!ui.font) {
+        HandleError(L"Failed to create font.");
+    }
+
+    // Raw input
+    if (config.raw_keyboard == true) RegisterForRawInput(hwnd, 0x06);
+    if (config.raw_mouse == true) RegisterForRawInput(hwnd, 0x02);
+    if (config.raw_input_debug == true) {
+        wchar_t message[256];
+        swprintf(message, sizeof(message) / sizeof(wchar_t), L"RawKeyboardEnable: %d\nRawMouseEnable: %d\nRegisterForRawKeyboardInput: %s\nRegisterForRawMouseInput: %s", 
+            config.raw_keyboard, config.raw_mouse, RegisterForRawInput(hwnd, 0x06) ? L"True" : L"False", RegisterForRawInput(hwnd, 0x02) ? L"True" : L"False");
+        MessageBoxW(NULL, message, L"Raw Input Variables", MB_OK);
+    }
+
+}
+
 void HandleError(const wchar_t* error_message) { // Generic error handler
     MessageBoxW(NULL, error_message, L"Error", MB_OK);
     if (config.debug_logging == 1){
@@ -700,12 +711,14 @@ void HandleInput(HWND hwnd, bool is_mouse_input) {   // Primary input logic is d
 }
 
 void HandleGenericKeyboardInput(HWND hwnd) { // ##REVIEW## Seems like we have an in-between function here
-    for (int vkey = 0; vkey <= 255; vkey++) {
-        UpdateKeyState(vkey, hwnd);
+    if (config.raw_keyboard == false){
+        for (int vkey = 0; vkey <= 255; vkey++) {
+            UpdateKeyState(vkey, hwnd);
+        }
     }
 }
 
-void HandleRawKeyboardInput(RAWINPUT* raw, HWND hwnd) {
+void HandleRawKeyboardInput(RAWINPUT* raw, HWND hwnd) { // ##REVIEW## Thrown together, double check
     int vkey = raw->data.keyboard.VKey;
 
     if (raw->data.keyboard.Flags == RI_KEY_MAKE && IsAlphanumeric(vkey) && !program_state.key_states[vkey]) {
@@ -717,16 +730,18 @@ void HandleRawKeyboardInput(RAWINPUT* raw, HWND hwnd) {
     }
 }
 
-void HandleGenericMouseInput(HWND hwnd) {
-    static bool was_button_pressed = false;
-    bool is_button_pressed = GetAsyncKeyState(VK_LBUTTON) & 0x8000;
+void HandleGenericMouseInput(HWND hwnd) { // ##REVIEW## Some quick and dirty conditional checks here
+    if (config.raw_mouse == false) {
+        static bool was_button_pressed = false;
+        bool is_button_pressed = GetAsyncKeyState(VK_LBUTTON) & 0x8000;
 
-    if (is_button_pressed && !was_button_pressed) {
-        HandleInput(hwnd, true);
-        was_button_pressed = true;
-    }
-    else if (!is_button_pressed && was_button_pressed) {
-        was_button_pressed = false;
+        if (is_button_pressed && !was_button_pressed) {
+            HandleInput(hwnd, true);
+            was_button_pressed = true;
+        }
+        else if (!is_button_pressed && was_button_pressed) {
+            was_button_pressed = false;
+        }
     }
 }
 
@@ -769,7 +784,7 @@ void ResetLogic(HWND hwnd) {
 
     program_state.game_state = STATE_READY;
    
-    SetTimer(hwnd, TIMER_READY, GenerateRandomDelay(config.min_delay,config.max_delay), NULL);
+    SetTimer(hwnd, TIMER_READY, GenerateRandomDelay(config.min_delay, config.max_delay), NULL);
     InvalidateRect(hwnd, NULL, TRUE);
 }
 
@@ -789,13 +804,3 @@ void HandleEarlyClick(HWND hwnd) {
     SetTimer(hwnd, TIMER_EARLY, config.early_reset_delay, NULL); // Early state eventually resets back to Ready state regardless of user input
     InvalidateRect(hwnd, NULL, TRUE);
 }
-
-/*
-void ResetAll(HWND hwnd) { // ##REVIEW## This isn't used but I guess it could be used to manually reset attempts, might break logging though
-    program_state.current_attempt = 0;
-    for (int i = 0; i < config.averaging_trials; i++) {
-        program_state.reaction_times[i] = 0;
-    }
-    ResetLogic(hwnd);
-}
-*/
