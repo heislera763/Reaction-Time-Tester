@@ -24,7 +24,6 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParamg)
 // Utility functions
 void HandleError(const wchar_t* error_message);
 void ValidateColors(const COLORREF color[]);
-void ValidateConfigSetting();
 void RemoveComment(wchar_t* str);
 int  GenerateRandomDelay(int min, int max);
 void BrushCleanup();
