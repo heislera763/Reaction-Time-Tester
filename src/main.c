@@ -75,17 +75,9 @@ typedef struct {
     BOOL italics_enabled;
 } UI;
 
-/* ##REVIEW## A 3rd level to the structs feels clumsy
-typedef struct{
-    Configuration;
-    ProgramState;
-    UI;
-} MainData;
-*/
-
 //Declare structs, pointers, and variables ##REVIEW## I would prefer this to be in my main scope
 Configuration config;
-ProgramState program_state = { .game_state = STATE_READY, .virtual_debounce = DEFAULT_VIRTUAL_DEBOUNCE, .reaction_times = {0}};
+ProgramState program_state = {.game_state = STATE_READY, .virtual_debounce = DEFAULT_VIRTUAL_DEBOUNCE, .reaction_times = {0}};
 UI ui;
 
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
@@ -111,8 +103,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     LoadConfig();
 
     // Get the dimensions of the main display, then calculate the position to center the window
-    // ##REVIEW## Some stuff seems weird here, Also I would like to move it to somewhere outside of main
-    int position_x = (GetSystemMetrics(SM_CXSCREEN) - GetSystemMetrics(SM_CYSCREEN)) / 2;
+    int position_x = (GetSystemMetrics(SM_CXSCREEN) - config.resolution_width) / 2;
     int position_y = (GetSystemMetrics(SM_CYSCREEN) - config.resolution_height) / 2;
 
     // Create main window centered on the main display
@@ -150,8 +141,8 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         break;
 
     case WM_SETCURSOR:
-        switch (LOWORD(lParam)) { // ##REVIEW## End goal is to remove mouse state from this section entirely, using utility function as stop gap, maybe pointless
-        case HTCLIENT: // In this section we use InputAllowed to change state of whether or not mouse can input commands
+        switch (LOWORD(lParam)) { // ##REVIEW## End goal is to remove mouse state from this section entirely
+        case HTCLIENT:
             SetMouseInputState(true);
             SetCursor(LoadCursor(NULL, IDC_HAND)); // Hand cursor
             break;
@@ -365,7 +356,7 @@ void GameInput(HWND* hwnd, LPARAM* lParam) {
 }
 
 // Utility Functions
-void InitializeRTT(HWND* hwnd) { // ##REVIEW## Hopefully we can most of the setup in here cleanly, does it need hwnd though? Probably no harm in it?
+void InitializeRTT(HWND* hwnd) { // ##REVIEW## Needs to be renamed
     QueryPerformanceFrequency(&program_state.frequency);
 
     if (config.trial_logging == true) InitializeLogFileName(0);
