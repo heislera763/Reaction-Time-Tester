@@ -36,7 +36,7 @@ typedef struct {
 
 // Program State and Data
 typedef struct {
-    // Game State
+    // Game State ##REVEIEW## Is "game" clear terminology for what this does?
     enum {
         STATE_READY,
         STATE_REACT,
@@ -118,7 +118,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     // Create main window centered on the main display
     HWND hwnd = CreateWindowExW(0, CLASS_NAME, L"Reaction Time Tester", WS_OVERLAPPEDWINDOW, position_x, position_y, config.resolution_width, config.resolution_height, NULL, NULL, hInstance, NULL);
 
-    InitializeRTT(hwnd);
+    InitializeRTT(&hwnd);
 
     // Display the window.
     ShowWindow(hwnd, nCmdShow);
@@ -147,7 +147,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     switch (uMsg) {
     case WM_CREATE:
         LoadAndSetIcon(hwnd);
-    break;
+        break;
 
     case WM_SETCURSOR:
         switch (LOWORD(lParam)) { // ##REVIEW## End goal is to remove mouse state from this section entirely, using utility function as stop gap, maybe pointless
@@ -203,13 +203,13 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     // Handle generic keyboard input
     case WM_KEYDOWN:
     case WM_KEYUP:
-            HandleGenericKeyboardInput(hwnd);
+        HandleGenericKeyboardInput(hwnd);
         break;
 
     // Handle generic mouse input
     case WM_LBUTTONDOWN:
     case WM_LBUTTONUP:
-            HandleGenericMouseInput(hwnd);
+        HandleGenericMouseInput(hwnd);
         break;
 
     case WM_DESTROY:
@@ -226,13 +226,13 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 
 
 // WIP Functions ##REVIEW## Need some cleanup here later
-void SetMouseInputState(bool state){ // ##REVIEW## Questionable conditional
+void SetMouseInputState(bool state) { // ##REVIEW## Questionable conditional
     if (!program_state.debounce_active) {
         program_state.input_mouse = state;
     }
 }
 
-void SetBrush(HBRUSH* brush){
+void SetBrush(HBRUSH* brush) {
     switch (program_state.game_state) {
     case STATE_REACT:
         *brush = ui.react_brush;
@@ -257,7 +257,7 @@ void SetBrush(HBRUSH* brush){
     }
 }
 
-void DisplayLogic(HDC* hdc, HWND* hwnd, HBRUSH* brush){
+void DisplayLogic(HDC* hdc, HWND* hwnd, HBRUSH* brush) {
         // Paint the entire window
         RECT rect;
         GetClientRect(*hwnd, &rect);
@@ -288,7 +288,7 @@ void DisplayLogic(HDC* hdc, HWND* hwnd, HBRUSH* brush){
                 swprintf_s(buffer, 100, L"Last: %.2lfms\nAverage (last %d): %.2lfms\nTrials so far: %d",
                     program_state.reaction_times[(program_state.current_attempt - 1) % config.averaging_trials], config.averaging_trials, average, program_state.trial_iteration);
             }
-            if (config.trial_logging == 1){
+            if (config.trial_logging == 1) {
                 AppendToLog(program_state.reaction_times[(program_state.current_attempt - 1 + config.averaging_trials) % config.averaging_trials],
                     program_state.trial_iteration, program_state.trial_log_path, NULL);
             }
@@ -298,7 +298,7 @@ void DisplayLogic(HDC* hdc, HWND* hwnd, HBRUSH* brush){
             swprintf_s(buffer, 100, L"Too early!\nTrials so far: %d", program_state.trial_iteration);
         }
 
-         // Calculate rectangle for the text and display it.
+        // Calculate rectangle for the text and display it.
         RECT text_rectangle;
         SetRectEmpty(&text_rectangle);
         DrawTextW(*hdc, buffer, -1, &text_rectangle, DT_CALCRECT | DT_WORDBREAK);
@@ -365,7 +365,7 @@ void GameInput(HWND* hwnd, LPARAM* lParam) {
 }
 
 // Utility Functions
-void InitializeRTT(HWND hwnd) { // ##REVIEW## Hopefully we can most of the setup in here cleanly, does it need hwnd though? Probably no harm in it?
+void InitializeRTT(HWND* hwnd) { // ##REVIEW## Hopefully we can most of the setup in here cleanly, does it need hwnd though? Probably no harm in it?
     QueryPerformanceFrequency(&program_state.frequency);
 
     if (config.trial_logging == true) InitializeLogFileName(0);
@@ -391,12 +391,12 @@ void InitializeRTT(HWND hwnd) { // ##REVIEW## Hopefully we can most of the setup
     }
 
     // Raw input
-    if (config.raw_keyboard == true) RegisterForRawInput(hwnd, 0x06);
-    if (config.raw_mouse == true) RegisterForRawInput(hwnd, 0x02);
+    if (config.raw_keyboard == true) RegisterForRawInput(*hwnd, 0x06);
+    if (config.raw_mouse == true) RegisterForRawInput(*hwnd, 0x02);
     if (config.raw_input_debug == true) {
         wchar_t message[256];
         swprintf(message, sizeof(message) / sizeof(wchar_t), L"RawKeyboardEnable: %d\nRawMouseEnable: %d\nRegisterForRawKeyboardInput: %s\nRegisterForRawMouseInput: %s", 
-            config.raw_keyboard, config.raw_mouse, RegisterForRawInput(hwnd, 0x06) ? L"True" : L"False", RegisterForRawInput(hwnd, 0x02) ? L"True" : L"False");
+            config.raw_keyboard, config.raw_mouse, RegisterForRawInput(*hwnd, 0x06) ? L"True" : L"False", RegisterForRawInput(*hwnd, 0x02) ? L"True" : L"False");
         MessageBoxW(NULL, message, L"Raw Input Variables", MB_OK);
     }
 
@@ -431,7 +431,7 @@ void RemoveComment(wchar_t* str) { // Removes comments and trailing spaces from 
     }
 }
 
-int GenerateRandomDelay(int min, int max) { // RNG stuff
+int GenerateRandomDelay(int min, int max) { // Rejection Sampling RNG
     int range = max - min + 1;
     int buckets = RAND_MAX / range;
     int limit = buckets * range;
@@ -530,7 +530,7 @@ void LoadTextColorConfiguration(const wchar_t* cfg_path) {
 }
 
 void LoadConfig() {
-    COLORREF ready_color[3], react_color[3], early_color[3], result_color[3];
+    COLORREF ready_color[3], react_color[3], early_color[3], result_color[3];  // ##REVIEW## I would like to eliminate these variables
     wchar_t cfg_path[MAX_PATH];
 
     if (!InitializeConfigFileAndPath(cfg_path, MAX_PATH)) {
@@ -565,7 +565,9 @@ void LoadConfig() {
     config.raw_input_debug = GetPrivateProfileIntW(L"Toggles", L"RawInputDebug", 0, cfg_path);
     config.trial_logging = GetPrivateProfileIntW(L"Toggles", L"TrialLoggingEnabled", 0, cfg_path);
     config.debug_logging = GetPrivateProfileIntW(L"Toggles", L"DebugLoggingEnabled", 0, cfg_path);
+    
 
+    // ##REVIEW## This is broken apart from LoadConfig. I would like to be able to reduce this and combine logic
     LoadTrialConfiguration(cfg_path);
     LoadTextColorConfiguration(cfg_path);
     LoadFontConfiguration(cfg_path, config.font_name, MAX_PATH, &config.font_size, config.font_style, MAX_PATH);
@@ -625,8 +627,7 @@ bool AppendToLog(double value, int iteration, wchar_t* logfile, const wchar_t* e
                 wchar_t error_message[512];
                 _wcserror_s(error_message, sizeof(error_message) / sizeof(wchar_t), err);
                 HandleError(error_message);
-            } else 
-            if (value == 0 && iteration == 0) { // Hypothetically value == 0 && iteration == 0 shouldn't be possible unless the values are forced
+            } else if (value == 0 && iteration == 0) { // Hypothetically value == 0 && iteration == 0 shouldn't be possible unless the values are forced
                 fwprintf(log_file, L"ERROR: %s\n", external_error_message); // Note: This only logs errors after we have already loaded the config
                 fclose(log_file);
                 return true;
@@ -634,8 +635,6 @@ bool AppendToLog(double value, int iteration, wchar_t* logfile, const wchar_t* e
                 fwprintf(log_file, L"Trial %d: %f\n", iteration, value);
                 fclose(log_file);
                 return true;
-                    {
-                }
             }
         }
     }
@@ -654,16 +653,14 @@ void LoadAndSetIcon(HWND hwnd) {
 
     // Load the small icon from the file
     HICON hIcon = (HICON)LoadImage(NULL, szIconPath, IMAGE_ICON, 32, 32, LR_LOADFROMFILE);
-    if (hIcon)
-    {
+    if (hIcon) {
         // Set the icon for the window
         SendMessage(hwnd, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
     }
 
     // Load the large icon for the Alt-Tab dialog
     HICON hIconLarge = (HICON)LoadImage(NULL, szIconPath, IMAGE_ICON, 64, 64, LR_LOADFROMFILE);
-    if (hIconLarge)
-    {
+    if (hIconLarge) {
         SendMessage(hwnd, WM_SETICON, ICON_BIG, (LPARAM)hIconLarge);
     }
 }

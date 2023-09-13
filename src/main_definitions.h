@@ -31,7 +31,7 @@ void GameStateLogic(WPARAM* wParam, HWND* hwnd);
 void GameInput(HWND* hwnd, LPARAM* lParam);
 
 // Utility functions
-void InitializeRTT(HWND hwnd);
+void InitializeRTT(HWND* hwnd);
 void HandleError(const wchar_t* error_message);
 void ValidateColors(const COLORREF color[]);
 void RemoveComment(wchar_t* str);
