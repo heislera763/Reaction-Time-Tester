@@ -14,7 +14,7 @@ This program allows users to measure their reaction times. Using an included con
 4. Early State: If the user reacts before the "React" prompt, this state indicates an early reaction (i.e., a failure).
 
 ### Background Info
-Most of my programming background is in some simple terminal stuff and embedded systems applications, and I've never created a win32 application before. So, I decided to use GPT-4 to assist with the initial development. It handled much of the annoying parts of this project (such as dealing with weird Microsoft/Windows stuff), while I made all the overarching design choices. As development has gone on I have been doing almost all of the actual programming, while using GPT-4 to deal with menial tasks and minor adjustments.
+Most of my programming background is in some simple terminal stuff and embedded systems applications, and I've never created a win32 application before. So, I decided to use GPT-4 to assist with the initial development. It handled much of the annoying parts of this project (such as dealing with weird Microsoft/Windows stuff), while I made the overarching design choices. As development has gone on I have taken on all of the programming work, while occasionally using GPT-4 to deal with menial tasks and minor adjustments.
 
 The most interesting aspect of generating so much of the initial codebase is that in the early stages it sometimes felt as though I was working in a codebase existed before I got to it. That being said, the technical debt that this ended up incurring meant that I needed to put forth a lot of effort to unmangle the code. Because of this, the project has unintentionally become a great educational experience when it comes to working in existing code and making changes to it.
 
