@@ -1,5 +1,5 @@
 # Reaction Time Tester
-This program allows users to measure their reaction times. Using the configuration file (user.cfg), users can customize many of the program's functionalities. Key features include adjustable timing, raw input support, and a lightweight design.
+This program allows users to measure their reaction times. Using the configuration file (user.cfg), users can customize much of the program's behavior. Key features include adjustable timing, raw input support, and a lightweight design.
 
 ### Setup and Requirements
 1. Unzip the release folder wherever you want the program to be installed.
