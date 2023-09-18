@@ -300,7 +300,7 @@ void DisplayLogic(HDC* hdc, HWND* hwnd, HBRUSH* brush) {
         DrawTextW(*hdc, buffer, -1, &centered_rectangle, DT_CENTER | DT_WORDBREAK);
 };
 
-void GameStateLogic(WPARAM* wParam, HWND* hwnd) {
+void GameStateLogic(WPARAM* wParam, HWND* hwnd) { // ##REVIEW## need to rename this
         switch (*wParam) {
         case TIMER_READY:
             program_state.game_state = STATE_READY;
@@ -329,7 +329,7 @@ void GameStateLogic(WPARAM* wParam, HWND* hwnd) {
         }
 }
 
-void GameInput(HWND* hwnd, LPARAM* lParam) {
+void GameInput(HWND* hwnd, LPARAM* lParam) { // ##REVIEW## This function name is really bad, this is for raw input
     UINT dwSize = 0;
     GetRawInputData((HRAWINPUT)*lParam, RID_INPUT, NULL, &dwSize, sizeof(RAWINPUTHEADER));
     LPBYTE lpb = (LPBYTE)malloc(dwSize * sizeof(BYTE));
