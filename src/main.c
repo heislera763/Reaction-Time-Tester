@@ -191,16 +191,31 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         GameInput(&hwnd, &lParam);
         break;
 
-    // Handle generic keyboard input
+    // Handle generic keyboard input ## Extract any debounce from this area
     case WM_KEYDOWN:
     case WM_KEYUP:
-        HandleGenericKeyboardInput(hwnd);
+        if (config.raw_keyboard == false){
+            for (int vkey = 0; vkey <= 255; vkey++) {
+                UpdateKeyState(vkey, hwnd);
+            }
+        }
         break;
 
     // Handle generic mouse input
     case WM_LBUTTONDOWN:
     case WM_LBUTTONUP:
-        HandleGenericMouseInput(hwnd);
+        if (config.raw_mouse == false) { // ##REVIEW## Some weird conditional checks here
+            static bool was_button_pressed = false;
+            bool is_button_pressed = GetAsyncKeyState(VK_LBUTTON) & 0x8000;
+
+            if (is_button_pressed && !was_button_pressed) {
+                HandleInput(hwnd, true);
+                was_button_pressed = true;
+            }
+            else if (!is_button_pressed && was_button_pressed) {
+                was_button_pressed = false;
+            }
+        }
         break;
 
     case WM_DESTROY:
@@ -329,7 +344,7 @@ void GameStateLogic(WPARAM* wParam, HWND* hwnd) { // ##REVIEW## need to rename t
         }
 }
 
-void GameInput(HWND* hwnd, LPARAM* lParam) { // ##REVIEW## This function name is really bad, this is for raw input
+    void GameInput(HWND* hwnd, LPARAM* lParam) { // ##REVIEW## This function name is really bad, this is for raw input
     UINT dwSize = 0;
     GetRawInputData((HRAWINPUT)*lParam, RID_INPUT, NULL, &dwSize, sizeof(RAWINPUTHEADER));
     LPBYTE lpb = (LPBYTE)malloc(dwSize * sizeof(BYTE));
@@ -698,13 +713,6 @@ void HandleInput(HWND hwnd, bool is_mouse_input) {   // Primary input logic is d
     }
 }
 
-void HandleGenericKeyboardInput(HWND hwnd) { // ##REVIEW## Seems like we have an in-between function here
-    if (config.raw_keyboard == false){
-        for (int vkey = 0; vkey <= 255; vkey++) {
-            UpdateKeyState(vkey, hwnd);
-        }
-    }
-}
 
 void HandleRawKeyboardInput(RAWINPUT* raw, HWND hwnd) { // ##REVIEW## Thrown together, double check
     int vkey = raw->data.keyboard.VKey;
@@ -718,20 +726,6 @@ void HandleRawKeyboardInput(RAWINPUT* raw, HWND hwnd) { // ##REVIEW## Thrown tog
     }
 }
 
-void HandleGenericMouseInput(HWND hwnd) { // ##REVIEW## Some quick and dirty conditional checks here
-    if (config.raw_mouse == false) {
-        static bool was_button_pressed = false;
-        bool is_button_pressed = GetAsyncKeyState(VK_LBUTTON) & 0x8000;
-
-        if (is_button_pressed && !was_button_pressed) {
-            HandleInput(hwnd, true);
-            was_button_pressed = true;
-        }
-        else if (!is_button_pressed && was_button_pressed) {
-            was_button_pressed = false;
-        }
-    }
-}
 
 void HandleRawMouseInput(RAWINPUT* raw, HWND hwnd) {
     static bool was_button_pressed = false;
