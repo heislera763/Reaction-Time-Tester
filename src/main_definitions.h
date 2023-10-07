@@ -25,26 +25,21 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParamg)
 
 // WIP Functions ##REVIEW## Need some cleanup here later
 void SetBrush(HBRUSH* brush);
-void SetMouseInputState(bool state);
 void DisplayLogic(HDC* hdc, HWND* hwnd, HBRUSH* brush);
-void GameStateLogic(WPARAM* wParam, HWND* hwnd);
-void GameInput(HWND* hwnd, LPARAM* lParam);
+void TimerStateLogic(WPARAM* wParam, HWND* hwnd);
+void HandleRawInput(HWND* hwnd, LPARAM* lParam);
 
 // Utility functions
-void InitializeRTT(HWND* hwnd);
+void InitializeSettings(HWND* hwnd);
 void HandleError(const wchar_t* error_message);
 void ValidateColors(const COLORREF color[]);
-void RemoveComment(wchar_t* str);
+void RemoveCommentFromString(wchar_t* str);
 int  GenerateRandomDelay(int min, int max);
 void BrushCleanup();
 
 // Configuration and setup functions
-bool InitializeConfigFileAndPath(wchar_t* cfg_path, size_t max_length);
+bool InitializeConfigFileAndPath(wchar_t* cfg_path);
 void LoadColorConfiguration(const wchar_t* cfg_path, const wchar_t* section_name, const wchar_t* color_name, const COLORREF* target_color_array);
-void LoadFontConfiguration(const wchar_t* cfg_path, wchar_t* target_font_name, size_t max_length, unsigned int* font_size, wchar_t* font_style, size_t font_style_length);
-void LoadTrialConfiguration(const wchar_t* cfg_path);
-void LoadTextColorConfiguration(const wchar_t* cfg_path);
-void AllocateMemoryForReactionTimes();
 void LoadConfig();
 void InitializeLogFileName(int log_type);
 bool AppendToLog(double value, int iteration, wchar_t* log_file, const wchar_t* external_error_message);
