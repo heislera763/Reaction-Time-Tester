@@ -21,23 +21,20 @@
 // Forward declarations for window procedure and other functions.
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParamg);
 
-
-
-// WIP Functions ##REVIEW## Need some cleanup here later
-void SetBrush(HBRUSH* brush);
+// Game Logic Functions
 void DisplayLogic(HDC* hdc, HWND* hwnd, HBRUSH* brush);
 void TimerStateLogic(WPARAM* wParam, HWND* hwnd);
-void HandleRawInput(HWND* hwnd, LPARAM* lParam);
+void ResetLogic(HWND hwnd);
 
-// Utility functions
+// Utility Functions
 void InitializeSettings(HWND* hwnd);
 void HandleError(const wchar_t* error_message);
+void SetBrush(HBRUSH* brush);
 void ValidateColors(const COLORREF color[]);
 void RemoveCommentFromString(wchar_t* str);
 int  GenerateRandomDelay(int min, int max);
-void BrushCleanup();
 
-// Configuration and setup functions
+// Configuration and Setup Functions
 bool InitializeConfigFileAndPath(wchar_t* cfg_path);
 void LoadColorConfiguration(const wchar_t* cfg_path, const wchar_t* section_name, const wchar_t* color_name, const COLORREF* target_color_array);
 void LoadConfig();
@@ -45,18 +42,11 @@ void InitializeLogFileName(int log_type);
 bool AppendToLog(double value, int iteration, wchar_t* log_file, const wchar_t* external_error_message);
 void LoadAndSetIcon(HWND hwnd);
 
-// Input handling functions
+// Input Functions
 bool RegisterForRawInput(HWND hwnd, USHORT usage);
 void HandleInput(HWND hwnd, bool is_mouse_input);
-void HandleGenericKeyboardInput(HWND hwnd);
+void HandleRawInput(HWND* hwnd, LPARAM* lParam);
 void HandleRawKeyboardInput(RAWINPUT* raw, HWND hwnd);
-void HandleGenericMouseInput(HWND hwnd);
 void HandleRawMouseInput(RAWINPUT* raw, HWND hwnd);
 bool IsAlphanumeric(int vkey);
 void UpdateKeyState(int vkey, HWND hwnd);
-
-// Main application logic functions
-void ResetLogic(HWND hwnd);
-void HandleReactClick(HWND hwnd);
-void HandleEarlyClick(HWND hwnd);
-void ResetAll(HWND hwnd);

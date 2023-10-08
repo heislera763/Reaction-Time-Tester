@@ -53,7 +53,7 @@ typedef struct {
     int key_states[256];
 
     // Logging and Data
-    double reaction_times[256]; // ##REVIEW## Hardcoded size for now, will be user configurable later.
+    double reaction_times[256]; // ##REVIEW## Hardcoded size for now, will be user configurable later? Maybe rolling array would be a better anyways
     wchar_t trial_log_path[MAX_PATH];
     wchar_t debug_log_path[MAX_PATH];
 
@@ -74,13 +74,10 @@ typedef struct {
     BOOL italics_enabled;
 } UI;
 
-// Declare structs, pointers, and variables ##REVIEW## I would prefer this to be in my main scope
+// Declare global structs
 Configuration config = {.virtual_debounce = DEFAULT_VIRTUAL_DEBOUNCE};
 ProgramState program_state = {.game_state = STATE_READY, .reaction_times = {0}};
 UI ui;
-
-
-
 
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
     
@@ -126,7 +123,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
     srand((unsigned)time(NULL));
     SetTimer(hwnd, TIMER_READY, GenerateRandomDelay(config.min_delay, config.max_delay), NULL);
 
-    // Enter Windows message loop. ##REVIEW## This is important and I don't 100% get it
+    // Enter Windows message loop.
     MSG msg = {0};
     while (GetMessage(&msg, NULL, 0, 0)) {
         TranslateMessage(&msg);
@@ -190,7 +187,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         break;
 
     case WM_TIMER:
-        TimerStateLogic(&wParam, &hwnd); // ##REVIEW## Any better way?
+        TimerStateLogic(&wParam, &hwnd);
         break;
 
     case WM_INPUT:
@@ -224,8 +221,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         if (config.raw_mouse) { 
             break;
         }
-
-        if (GetAsyncKeyState(VK_LBUTTON) & 0x8000) { // ##REVIEW## Some weird conditional checks here
+        if (GetAsyncKeyState(VK_LBUTTON) & 0x8000) {
             HandleInput(hwnd, true);
         }
         break;
@@ -241,33 +237,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     return 0;
 }
 
-
-// WIP Functions ##REVIEW## Need some cleanup here later
-void SetBrush(HBRUSH* brush) {
-    switch (program_state.game_state) {
-    case STATE_REACT:
-        *brush = ui.react_brush;
-        break;
-
-    case STATE_EARLY:
-        *brush = ui.early_brush;
-        break;
-
-    case STATE_RESULT:
-        *brush = ui.result_brush;
-        break;
-
-    case STATE_READY:
-        *brush = ui.ready_brush;
-        break;
-
-    default:
-        *brush = ui.ready_brush;
-        HandleError(L"Invalid or undefined program state!");
-        break;
-    }
-}
-
+// Game Logic Functions
 void DisplayLogic(HDC* hdc, HWND* hwnd, HBRUSH* brush) {
     // Paint the entire window
     RECT rect;
@@ -347,54 +317,15 @@ void TimerStateLogic(WPARAM* wParam, HWND* hwnd) {
     }
 }
 
-void HandleRawInput(HWND* hwnd, LPARAM* lParam) {
-    UINT dwSize = 0;
-    GetRawInputData((HRAWINPUT)*lParam, RID_INPUT, NULL, &dwSize, sizeof(RAWINPUTHEADER));
-    LPBYTE lpb = (LPBYTE)malloc(dwSize * sizeof(BYTE));
+void ResetLogic(HWND hwnd) {
+    KillTimer(hwnd, TIMER_READY);
+    KillTimer(hwnd, TIMER_REACT);
+    KillTimer(hwnd, TIMER_EARLY);
 
-    if (lpb == NULL) {
-        return;
-    }
-
-    if (GetRawInputData((HRAWINPUT)*lParam, RID_INPUT, lpb, &dwSize, sizeof(RAWINPUTHEADER)) != dwSize) {
-        HandleError(L"GetRawInputData did not return correct size!");
-        free(lpb);
-    }
-
-    RAWINPUT* raw = (RAWINPUT*)lpb;
-
-    if (raw->header.dwType == RIM_TYPEKEYBOARD && config.raw_keyboard) {
-        HandleRawKeyboardInput(raw, *hwnd);
-    }
-    else if (raw->header.dwType == RIM_TYPEMOUSE && config.raw_mouse) {
-        HandleRawMouseInput(raw, *hwnd);
-    }
-
-    free(lpb);
-}
-
-void HandleRawKeyboardInput(RAWINPUT* raw, HWND hwnd) { // ##REVIEW## Thrown together, double check
-    int vkey = raw->data.keyboard.VKey;
-
-    if (raw->data.keyboard.Flags == RI_KEY_MAKE && IsAlphanumeric(vkey) && !program_state.key_states[vkey]) {
-        HandleInput(hwnd, false);
-        program_state.key_states[vkey] = true;
-    }
-    else if (raw->data.keyboard.Flags == RI_KEY_BREAK) {
-        program_state.key_states[vkey] = false;
-    }
-}
-
-void HandleRawMouseInput(RAWINPUT* raw, HWND hwnd) {
-    static bool was_button_pressed = false;
-
-    if (raw->data.mouse.usButtonFlags & RI_MOUSE_LEFT_BUTTON_DOWN && !was_button_pressed) {
-        HandleInput(hwnd, true);
-        was_button_pressed = true;
-    }
-    else if (raw->data.mouse.usButtonFlags & RI_MOUSE_LEFT_BUTTON_UP && was_button_pressed) {
-        was_button_pressed = false;
-    }
+    program_state.game_state = STATE_READY;
+   
+    SetTimer(hwnd, TIMER_READY, GenerateRandomDelay(config.min_delay, config.max_delay), NULL);
+    InvalidateRect(hwnd, NULL, TRUE);
 }
 
 // Utility Functions
@@ -436,15 +367,39 @@ void InitializeSettings(HWND* hwnd) {
             config.raw_keyboard, config.raw_mouse, RegisterForRawInput(*hwnd, 0x06) ? L"True" : L"False", RegisterForRawInput(*hwnd, 0x02) ? L"True" : L"False");
         MessageBoxW(NULL, message, L"Raw Input Variables", MB_OK);
     }
-
 }
 
-void HandleError(const wchar_t* error_message) { // Generic error handler
+void HandleError(const wchar_t* error_message) {
     MessageBoxW(NULL, error_message, L"Error", MB_OK);
     if (config.debug_logging){
         AppendToLog(0, 0, program_state.debug_log_path, error_message);
     }
     exit(1);
+}
+
+void SetBrush(HBRUSH* brush) {
+    switch (program_state.game_state) {
+    case STATE_REACT:
+        *brush = ui.react_brush;
+        break;
+
+    case STATE_EARLY:
+        *brush = ui.early_brush;
+        break;
+
+    case STATE_RESULT:
+        *brush = ui.result_brush;
+        break;
+
+    case STATE_READY:
+        *brush = ui.ready_brush;
+        break;
+
+    default:
+        *brush = ui.ready_brush;
+        HandleError(L"Invalid or undefined program state!");
+        break;
+    }
 }
 
 void ValidateColors(const COLORREF color[]) {
@@ -525,7 +480,7 @@ bool InitializeConfigFileAndPath(wchar_t* cfg_path) { // Initializes paths and a
     return true;
 }
 
-void LoadColorConfiguration(const wchar_t* cfg_path, const wchar_t* section_name, const wchar_t* colorName, const COLORREF* target_color_array) { // Load RGB
+void LoadColorConfiguration(const wchar_t* cfg_path, const wchar_t* section_name, const wchar_t* colorName, const COLORREF* color) { // Load RGB
     wchar_t buffer[255];
     GetPrivateProfileStringW(section_name, colorName, L"", buffer, sizeof(buffer) / sizeof(wchar_t), cfg_path);  // Retrieve color configuration as comma-separated RGB values
 
@@ -533,15 +488,11 @@ void LoadColorConfiguration(const wchar_t* cfg_path, const wchar_t* section_name
         HandleError(L"Failed to read color configuration");
     }
 
-    swscanf_s(buffer, L"%d,%d,%d", &target_color_array[0], &target_color_array[1], &target_color_array[2]);  // Extract individual RGB values
-    ValidateColors(target_color_array);
+    swscanf_s(buffer, L"%d,%d,%d", &color[0], &color[1], &color[2]);  // Extract individual RGB values
+    ValidateColors(color);
 }
 
-
-  // ##REVIEW##
-  // Probably need more error handling for bad values in config?
-  // Make LoadColorConfiguration boolean function?
-void LoadConfig() {    
+void LoadConfig() { // ##REVIEW## Probably need more error handling for bad values in config?
     COLORREF ready_color[3], react_color[3], early_color[3], result_color[3];
     wchar_t cfg_path[MAX_PATH];
 
@@ -695,8 +646,7 @@ void LoadAndSetIcon(HWND hwnd) {
     }
 }
 
-
-// Input handling functions
+// Input Functions
 bool RegisterForRawInput(HWND hwnd, USHORT usage) {
     RAWINPUTDEVICE rid = {0};
     rid.usUsagePage = 0x01;
@@ -744,18 +694,56 @@ void HandleInput(HWND hwnd, bool is_mouse_input) {   // Primary input logic is d
     }
 }
 
-bool IsAlphanumeric(int vkey) {
-    return (vkey >= '0' && vkey <= '9') || (vkey >= 'A' && vkey <= 'Z');
+void HandleRawInput(HWND* hwnd, LPARAM* lParam) { // ##REVIEW## Keyboard and Mouse functions should be simplified and then moved into this function if possible
+    UINT dwSize = 0;
+    GetRawInputData((HRAWINPUT)*lParam, RID_INPUT, NULL, &dwSize, sizeof(RAWINPUTHEADER));
+    LPBYTE lpb = (LPBYTE)malloc(dwSize * sizeof(BYTE));
+
+    if (lpb == NULL) {
+        return;
+    }
+
+    if (GetRawInputData((HRAWINPUT)*lParam, RID_INPUT, lpb, &dwSize, sizeof(RAWINPUTHEADER)) != dwSize) {
+        HandleError(L"GetRawInputData did not return correct size!");
+        free(lpb);
+    }
+
+    RAWINPUT* raw = (RAWINPUT*)lpb;
+
+    if (raw->header.dwType == RIM_TYPEKEYBOARD && config.raw_keyboard) {
+        HandleRawKeyboardInput(raw, *hwnd);
+    }
+    else if (raw->header.dwType == RIM_TYPEMOUSE && config.raw_mouse) {
+        HandleRawMouseInput(raw, *hwnd);
+    }
+
+    free(lpb);
 }
 
-// Main application logic functions
-void ResetLogic(HWND hwnd) {
-    KillTimer(hwnd, TIMER_READY);
-    KillTimer(hwnd, TIMER_REACT);
-    KillTimer(hwnd, TIMER_EARLY);
+void HandleRawKeyboardInput(RAWINPUT* raw, HWND hwnd) {
+    int vkey = raw->data.keyboard.VKey;
 
-    program_state.game_state = STATE_READY;
-   
-    SetTimer(hwnd, TIMER_READY, GenerateRandomDelay(config.min_delay, config.max_delay), NULL);
-    InvalidateRect(hwnd, NULL, TRUE);
+    if (raw->data.keyboard.Flags == RI_KEY_MAKE && IsAlphanumeric(vkey) && !program_state.key_states[vkey]) {
+        HandleInput(hwnd, false);
+        program_state.key_states[vkey] = true;
+    }
+    else if (raw->data.keyboard.Flags == RI_KEY_BREAK) {
+        program_state.key_states[vkey] = false;
+    }
+}
+
+void HandleRawMouseInput(RAWINPUT* raw, HWND hwnd) {
+    static bool was_button_pressed = false;
+
+    if (raw->data.mouse.usButtonFlags & RI_MOUSE_LEFT_BUTTON_DOWN && !was_button_pressed) {
+        HandleInput(hwnd, true);
+        was_button_pressed = true;
+    }
+    else if (raw->data.mouse.usButtonFlags & RI_MOUSE_LEFT_BUTTON_UP && was_button_pressed) {
+        was_button_pressed = false;
+    }
+}
+
+bool IsAlphanumeric(int vkey) {
+    return (vkey >= '0' && vkey <= '9') || (vkey >= 'A' && vkey <= 'Z');
 }
