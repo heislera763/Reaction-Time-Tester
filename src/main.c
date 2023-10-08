@@ -36,8 +36,8 @@ typedef struct {
 } Configuration;
 
 // Program State and Data
-typedef struct {
-    // Game State ##REVEIEW## Is "game" clear terminology for what this does?
+typedef struct { // ##REVIEW## Should I split this up a bit? Have a ProgramState and ProgramData?
+    // Game State
     enum {
         STATE_READY,
         STATE_REACT,
@@ -53,7 +53,7 @@ typedef struct {
     int key_states[256];
 
     // Logging and Data
-    double reaction_times[256]; // ##REVIEW## Hardcoded size for now, will be user configurable later? Maybe rolling array would be a better anyways
+    double reaction_times[1024]; // ##REVIEW## Hardcoded size for now. Make user configurable later? Maybe rolling array would be a better
     wchar_t trial_log_path[MAX_PATH];
     wchar_t debug_log_path[MAX_PATH];
 
@@ -551,8 +551,6 @@ void LoadConfig() { // ##REVIEW## Probably need more error handling for bad valu
 
     GetPrivateProfileStringW(L"Fonts", L"FontStyle", DEFAULT_FONT_STYLE, config.font_style, (DWORD)MAX_PATH, cfg_path);
     RemoveCommentFromString(config.font_style);
-
-
 }
 
 void InitializeLogFileName(int log_type) { // log_type = 0 = trial log, log_type = 1 = debug log
@@ -574,7 +572,6 @@ void InitializeLogFileName(int log_type) { // log_type = 0 = trial log, log_type
         wcsftime(timestamp, timestamp_length, L"%Y%m%d%H%M%S", tmp);  // Format YYYYMMDDHHMMSS
         swprintf_s(program_state.trial_log_path, MAX_PATH, L"log\\Log_%s.log", timestamp);
     }
-
 }
 
 bool AppendToLog(double value, int iteration, wchar_t* logfile, const wchar_t* external_error_message) {  // Handles log file operations
