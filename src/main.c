@@ -6,6 +6,7 @@
 #include <time.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include "main_definitions.h"
 
 // Configuration
@@ -15,9 +16,9 @@ typedef struct {
     COLORREF results_font[3];
     wchar_t font_name[MAX_PATH];
     wchar_t font_style[MAX_PATH];
-    unsigned int font_size;
-    unsigned int resolution_width;
-    unsigned int resolution_height;
+    uint32_t font_size;
+    uint32_t resolution_width;
+    uint32_t resolution_height;
 
     // Toggles
     bool raw_keyboard;
@@ -27,12 +28,12 @@ typedef struct {
     bool debug_logging;
 
     // Game Options
-    int averaging_trials;
-    int total_trials;
-    unsigned int min_delay;
-    unsigned int max_delay;
-    unsigned int early_reset_delay;
-    int virtual_debounce;
+    uint32_t averaging_trials;
+    uint32_t total_trials;
+    uint32_t min_delay;
+    uint32_t max_delay;
+    uint32_t early_reset_delay;
+    uint32_t virtual_debounce;
 } Configuration;
 
 // Program State and Data
@@ -44,8 +45,8 @@ typedef struct { // ##REVIEW## Should I split this up a bit? Have a ProgramState
         STATE_EARLY,
         STATE_RESULT
     } game_state;
-    int current_attempt;
-    int trial_iteration;
+    uint32_t current_attempt;
+    uint32_t trial_iteration;
 
     // Input State
     bool mouse_active;
