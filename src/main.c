@@ -16,9 +16,9 @@ typedef struct {
     COLORREF results_font[3];
     wchar_t font_name[MAX_PATH];
     wchar_t font_style[MAX_PATH];
-    uint32_t font_size;
-    uint32_t resolution_width;
-    uint32_t resolution_height;
+    int font_size;
+    int resolution_width;
+    int resolution_height;
 
     // Toggles
     bool raw_keyboard;
@@ -28,12 +28,12 @@ typedef struct {
     bool debug_logging;
 
     // Game Options
-    uint32_t averaging_trials;
-    uint32_t total_trials;
-    uint32_t min_delay;
-    uint32_t max_delay;
-    uint32_t early_reset_delay;
-    uint32_t virtual_debounce;
+    int averaging_trials;
+    int total_trials;
+    int min_delay;
+    int max_delay;
+    int early_reset_delay;
+    int virtual_debounce;
 } Configuration;
 
 // Program State and Data
@@ -45,8 +45,8 @@ typedef struct { // ##REVIEW## Should I split this up a bit? Have a ProgramState
         STATE_EARLY,
         STATE_RESULT
     } game_state;
-    uint32_t current_attempt;
-    uint32_t trial_iteration;
+    int current_attempt;
+    int trial_iteration;
 
     // Input State
     bool mouse_active;
@@ -58,7 +58,7 @@ typedef struct { // ##REVIEW## Should I split this up a bit? Have a ProgramState
     wchar_t trial_log_path[MAX_PATH];
     wchar_t debug_log_path[MAX_PATH];
 
-    // High-resolution timing
+    // Timing
     LARGE_INTEGER start_time;
     LARGE_INTEGER end_time;
     LARGE_INTEGER frequency;
