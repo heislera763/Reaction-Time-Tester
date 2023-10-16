@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <uchar.h>
 #include "main_definitions.h"
 
 // Configuration
@@ -40,6 +41,7 @@ typedef struct {
 typedef struct { // ##REVIEW## Should I split this up a bit? Have a ProgramState and ProgramData?
     // Game State
     enum {
+        STATE_INITIAL,
         STATE_READY,
         STATE_REACT,
         STATE_EARLY,
@@ -77,7 +79,7 @@ typedef struct {
 
 // Declare global structs
 Configuration config = {.virtual_debounce = DEFAULT_VIRTUAL_DEBOUNCE};
-ProgramState program_state = {.game_state = STATE_READY, .reaction_times = {0}};
+ProgramState program_state = {.game_state = STATE_INITIAL, .reaction_times = {0}};
 UI ui;
 
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
@@ -122,7 +124,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _
 
     // Seed RNG and set initial timer
     srand((unsigned)time(NULL));
-    SetTimer(hwnd, TIMER_READY, GenerateRandomDelay(config.min_delay, config.max_delay), NULL);
+    // SetTimer(hwnd, TIMER_READY, GenerateRandomDelay(config.min_delay, config.max_delay), NULL);
 
     // Enter Windows message loop.
     MSG msg = {0};
@@ -252,7 +254,15 @@ void DisplayLogic(HDC* hdc, HWND* hwnd, HBRUSH* brush) {
 
     wchar_t buffer[100] = {0};
 
-    if (program_state.game_state == STATE_RESULT) { // ##REVIEW## This is probably the hardest to follow code in the script
+    // ##REVIEW## This is probably the hardest to follow code in the script, especially the STATE_RESULT case. Should extract game logic from here
+
+    switch (program_state.game_state){
+    case STATE_INITIAL:
+        SetTextColor(*hdc, RGB(config.results_font[0], config.results_font[1], config.results_font[2]));
+        swprintf_s(buffer, 100, L"Click to Begin");
+        break;
+
+    case STATE_RESULT:
         SetTextColor(*hdc, RGB(config.results_font[0], config.results_font[1], config.results_font[2]));
         program_state.trial_iteration++;
 
@@ -274,11 +284,17 @@ void DisplayLogic(HDC* hdc, HWND* hwnd, HBRUSH* brush) {
             AppendToLog(program_state.reaction_times[(program_state.current_attempt - 1 + config.averaging_trials) % config.averaging_trials],
                 program_state.trial_iteration, program_state.trial_log_path, NULL);
         }
-    }
-    else if (program_state.game_state == STATE_EARLY) {
+        break;
+        
+    case STATE_EARLY:
         SetTextColor(*hdc, RGB(config.early_font[0], config.early_font[1], config.early_font[2]));
         swprintf_s(buffer, 100, L"Too early!\nTrials so far: %d", program_state.trial_iteration);
+        break;
+
+    default:
+        break;
     }
+    
 
     // Calculate rectangle for the text and display it.
     RECT text_rectangle;
@@ -336,8 +352,8 @@ void InitializeSettings(HWND* hwnd) {
     if (config.trial_logging) InitializeLogFileName(0);
     if (config.debug_logging) InitializeLogFileName(1);
 
-    // Switch to ready state
-    program_state.game_state = STATE_READY;
+    // Ensure Initial State
+    program_state.game_state = STATE_INITIAL;
 
     // Prepare font
     ui.font_weight = FW_REGULAR;
@@ -380,6 +396,10 @@ void HandleError(const wchar_t* error_message) {
 
 void SetBrush(HBRUSH* brush) {
     switch (program_state.game_state) {
+    case STATE_INITIAL:
+        *brush = ui.result_brush;
+        break;
+
     case STATE_REACT:
         *brush = ui.react_brush;
         break;
@@ -662,7 +682,17 @@ void HandleInput(HWND hwnd, bool is_mouse_input) {   // Primary input logic is d
     if ((!program_state.mouse_active && is_mouse_input) || (program_state.debounce_active)) {
         return;  // Ignore mouse clicks outside of active area
     }
-    if (program_state.game_state == STATE_REACT) {
+
+    // ##REVIEW## Make this a switch case
+
+    switch(program_state.game_state) {
+    case STATE_INITIAL:
+        program_state.game_state = STATE_READY;
+        SetTimer(hwnd, TIMER_READY, GenerateRandomDelay(config.min_delay, config.max_delay), NULL);
+        InvalidateRect(hwnd, NULL, TRUE);
+        break;
+
+    case STATE_REACT:
         QueryPerformanceCounter(&program_state.end_time);
         double time_taken = ((double)(program_state.end_time.QuadPart - program_state.start_time.QuadPart) / program_state.frequency.QuadPart) * 1000;
 
@@ -671,21 +701,29 @@ void HandleInput(HWND hwnd, bool is_mouse_input) {   // Primary input logic is d
 
         program_state.game_state = STATE_RESULT;
         InvalidateRect(hwnd, NULL, TRUE);
-    }
-    else if ((program_state.game_state == STATE_EARLY) || (program_state.game_state == STATE_RESULT)) {
-        if ((program_state.game_state == STATE_RESULT) && program_state.current_attempt == config.averaging_trials) { // ##REVIEW## Double check this
+        break;
+
+    case STATE_EARLY:
+    case STATE_RESULT:
+        if ((program_state.game_state == STATE_RESULT) && program_state.current_attempt == config.averaging_trials) { // ##REVIEW## This is messy
             program_state.current_attempt = 0;
             for (int i = 0; i < config.averaging_trials; i++) {
                 program_state.reaction_times[i] = 0;
             }
         }
         ResetLogic(hwnd);
-    }
-    else {
+        break;
+
+    case STATE_READY:
         program_state.game_state = STATE_EARLY;
-        SetTimer(hwnd, TIMER_EARLY, config.early_reset_delay, NULL); // Early state eventually resets back to Ready state regardless of user input
+        KillTimer(hwnd, TIMER_READY);
+        if (config.early_reset_delay > 0) {
+            SetTimer(hwnd, TIMER_EARLY, config.early_reset_delay, NULL); // Early state eventually resets back to Ready state automatically
+        }
         InvalidateRect(hwnd, NULL, TRUE);
+        break;
     }
+
     if ((config.virtual_debounce > 0) && (!program_state.debounce_active)) { // Activate debounce if enabled
         program_state.debounce_active = true;
         SetTimer(hwnd, TIMER_DEBOUNCE, config.virtual_debounce, NULL);
