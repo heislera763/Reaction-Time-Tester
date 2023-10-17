@@ -254,8 +254,6 @@ void DisplayLogic(HDC* hdc, HWND* hwnd, HBRUSH* brush) {
 
     wchar_t buffer[100] = {0};
 
-    // ##REVIEW## This is probably the hardest to follow code in the script, especially the STATE_RESULT case. Should extract game logic from here
-
     switch (program_state.game_state){
     case STATE_INITIAL:
         SetTextColor(*hdc, RGB(config.results_font[0], config.results_font[1], config.results_font[2]));
@@ -264,26 +262,7 @@ void DisplayLogic(HDC* hdc, HWND* hwnd, HBRUSH* brush) {
 
     case STATE_RESULT:
         SetTextColor(*hdc, RGB(config.results_font[0], config.results_font[1], config.results_font[2]));
-        program_state.trial_iteration++;
-
-        if (program_state.current_attempt < config.averaging_trials) {
-            swprintf_s(buffer, 100, L"Last: %.2lfms\nComplete %d trials for average.\nTrials so far: %d",
-                program_state.reaction_times[(program_state.current_attempt - 1 + config.averaging_trials) % config.averaging_trials],
-                     config.averaging_trials, program_state.trial_iteration);
-        }
-        else {
-            double total = 0;
-            for (int i = 0; i < config.averaging_trials; i++) {
-                total += program_state.reaction_times[i];
-            }
-            double average = total / config.averaging_trials;
-            swprintf_s(buffer, 100, L"Last: %.2lfms\nAverage (last %d): %.2lfms\nTrials so far: %d",
-                program_state.reaction_times[(program_state.current_attempt - 1) % config.averaging_trials], config.averaging_trials, average, program_state.trial_iteration);
-        }
-        if (config.trial_logging) {
-            AppendToLog(program_state.reaction_times[(program_state.current_attempt - 1 + config.averaging_trials) % config.averaging_trials],
-                program_state.trial_iteration, program_state.trial_log_path, NULL);
-        }
+        GameResultLogic(&buffer);
         break;
         
     case STATE_EARLY:
@@ -343,6 +322,28 @@ void ResetLogic(HWND hwnd) {
    
     SetTimer(hwnd, TIMER_READY, GenerateRandomDelay(config.min_delay, config.max_delay), NULL);
     InvalidateRect(hwnd, NULL, TRUE);
+}
+
+void GameResultLogic(wchar_t* buffer) { // ##REVIEW## Hard to follow. Maybe clean up?
+    program_state.trial_iteration++;
+
+    if (program_state.current_attempt < config.averaging_trials) {
+            swprintf_s(buffer, 100, L"Last: %.2lfms\nComplete %d trials for average.\nTrials so far: %d",
+                program_state.reaction_times[(program_state.current_attempt - 1 + config.averaging_trials) % config.averaging_trials],
+                     config.averaging_trials, program_state.trial_iteration);
+        } else {
+            double total = 0;
+            for (int i = 0; i < config.averaging_trials; i++) {
+                total += program_state.reaction_times[i];
+            }
+            double average = total / config.averaging_trials;
+            swprintf_s(buffer, 100, L"Last: %.2lfms\nAverage (last %d): %.2lfms\nTrials so far: %d",
+                program_state.reaction_times[(program_state.current_attempt - 1) % config.averaging_trials], config.averaging_trials, average, program_state.trial_iteration);
+        }
+        if (config.trial_logging) {
+            AppendToLog(program_state.reaction_times[(program_state.current_attempt - 1 + config.averaging_trials) % config.averaging_trials],
+                program_state.trial_iteration, program_state.trial_log_path, NULL);
+        }
 }
 
 // Utility Functions

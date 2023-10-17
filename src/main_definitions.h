@@ -25,6 +25,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParamg)
 void DisplayLogic(HDC* hdc, HWND* hwnd, HBRUSH* brush);
 void TimerStateLogic(WPARAM* wParam, HWND* hwnd);
 void ResetLogic(HWND hwnd);
+void GameResultLogic(wchar_t* buffer);
 
 // Utility Functions
 void InitializeSettings(HWND* hwnd);
