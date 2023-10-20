@@ -54,9 +54,12 @@ typedef struct { // ##REVIEW## Should I split this up a bit? Have a ProgramState
     bool mouse_active;
     bool debounce_active;
     int key_states[256];
+} ProgramState;
 
+typedef struct {
     // Logging and Data
-    double reaction_times[1024]; // ##REVIEW## Hardcoded size for now. Make user configurable later? Maybe rolling array would be a better
+    double reaction_time_value;
+    double reaction_time_array[1024]; // ##REVIEW## Hardcoded size for now. Make user configurable later? Maybe rolling array would be a better
     wchar_t trial_log_path[MAX_PATH];
     wchar_t debug_log_path[MAX_PATH];
 
@@ -64,7 +67,8 @@ typedef struct { // ##REVIEW## Should I split this up a bit? Have a ProgramState
     LARGE_INTEGER start_time;
     LARGE_INTEGER end_time;
     LARGE_INTEGER frequency;
-} ProgramState;
+} ProgramData;
+
 
 // UI and Rendering
 typedef struct {
@@ -79,7 +83,8 @@ typedef struct {
 
 // Declare global structs
 Configuration config = {.virtual_debounce = DEFAULT_VIRTUAL_DEBOUNCE};
-ProgramState program_state = {.game_state = STATE_INITIAL, .reaction_times = {0}};
+ProgramState state = {.game_state = STATE_INITIAL};
+ProgramData data = {.reaction_time_array = {0}};
 UI ui;
 
 int WINAPI WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance, _In_ LPSTR lpCmdLine, _In_ int nCmdShow) {
@@ -145,35 +150,35 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     case WM_SETCURSOR:
         switch (LOWORD(lParam)) {
         case HTCAPTION:
-            program_state.mouse_active = false;
+            state.mouse_active = false;
             SetCursor(LoadCursor(NULL, IDC_ARROW)); // Hand cursor
             break;
         case HTCLIENT:
-            program_state.mouse_active = true;
+            state.mouse_active = true;
             SetCursor(LoadCursor(NULL, IDC_HAND)); // Hand cursor
             break;
         case HTLEFT:
         case HTRIGHT:
-            program_state.mouse_active = false;
+            state.mouse_active = false;
             SetCursor(LoadCursor(NULL, IDC_SIZEWE)); // Left or right border cursor
             break;
         case HTTOP:
         case HTBOTTOM:
-            program_state.mouse_active = false;
+            state.mouse_active = false;
             SetCursor(LoadCursor(NULL, IDC_SIZENS)); // Top or bottom border cursor
             break;
         case HTTOPLEFT:
         case HTBOTTOMRIGHT:
-            program_state.mouse_active = false;
+            state.mouse_active = false;
             SetCursor(LoadCursor(NULL, IDC_SIZENWSE)); // Top-left or bottom-right corner cursor
             break;
         case HTTOPRIGHT:
         case HTBOTTOMLEFT:
-            program_state.mouse_active = false;
+            state.mouse_active = false;
             SetCursor(LoadCursor(NULL, IDC_SIZENESW)); // Top-right or bottom-left corner cursor
             break;
         default:
-            program_state.mouse_active = false;
+            state.mouse_active = false;
             SetCursor(LoadCursor(NULL, IDC_ARROW)); // Default cursor
             break;
         }
@@ -207,12 +212,12 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         for (int vkey = 0; vkey <= 255; vkey++) {
             if (IsAlphanumeric(vkey)) {
                 bool is_key_pressed = GetAsyncKeyState(vkey) & 0x8000;
-                if (is_key_pressed && !program_state.key_states[vkey]) {
+                if (is_key_pressed && !state.key_states[vkey]) {
                     HandleInput(hwnd, false);
-                    program_state.key_states[vkey] = 1;
+                    state.key_states[vkey] = 1;
                 }
-                else if (!is_key_pressed && program_state.key_states[vkey]) {
-                    program_state.key_states[vkey] = 0;
+                else if (!is_key_pressed && state.key_states[vkey]) {
+                    state.key_states[vkey] = 0;
                 }
             }
         }
@@ -254,7 +259,7 @@ void DisplayLogic(HDC* hdc, HWND* hwnd, HBRUSH* brush) {
 
     wchar_t buffer[100] = {0};
 
-    switch (program_state.game_state){
+    switch (state.game_state){
     case STATE_INITIAL:
         SetTextColor(*hdc, RGB(config.results_font[0], config.results_font[1], config.results_font[2]));
         swprintf_s(buffer, 100, L"Click to Begin");
@@ -262,12 +267,12 @@ void DisplayLogic(HDC* hdc, HWND* hwnd, HBRUSH* brush) {
 
     case STATE_RESULT:
         SetTextColor(*hdc, RGB(config.results_font[0], config.results_font[1], config.results_font[2]));
-        GameResultLogic(&buffer);
+        GameResultLogic(buffer);
         break;
         
     case STATE_EARLY:
         SetTextColor(*hdc, RGB(config.early_font[0], config.early_font[1], config.early_font[2]));
-        swprintf_s(buffer, 100, L"Too early!\nTrials so far: %d", program_state.trial_iteration);
+        swprintf_s(buffer, 100, L"Too early!\nTrials so far: %d", state.trial_iteration);
         break;
 
     default:
@@ -280,7 +285,7 @@ void DisplayLogic(HDC* hdc, HWND* hwnd, HBRUSH* brush) {
     SetRectEmpty(&text_rectangle);
     DrawTextW(*hdc, buffer, -1, &text_rectangle, DT_CALCRECT | DT_WORDBREAK);
 
-    // ##REVIEW## Text doesn't center vertically (Pretty sure GPT mangled this at some point)
+    // ##REVIEW##LOW## Text doesn't center vertically (Pretty sure GPT mangled this at some point)
     RECT centered_rectangle = rect;
     centered_rectangle.top += (rect.bottom - rect.top - (text_rectangle.bottom - text_rectangle.top)) / 2; 
     DrawTextW(*hdc, buffer, -1, &centered_rectangle, DT_CENTER | DT_WORDBREAK);
@@ -289,15 +294,15 @@ void DisplayLogic(HDC* hdc, HWND* hwnd, HBRUSH* brush) {
 void TimerStateLogic(WPARAM* wParam, HWND* hwnd) {
     switch (*wParam) {
     case TIMER_READY:
-        program_state.game_state = STATE_READY;
+        state.game_state = STATE_READY;
         KillTimer(*hwnd, TIMER_READY);
         SetTimer(*hwnd, TIMER_REACT, GenerateRandomDelay(config.min_delay, config.max_delay), NULL);
         break;
 
     case TIMER_REACT:
-        if (program_state.game_state == STATE_READY) {
-            program_state.game_state = STATE_REACT;
-            QueryPerformanceCounter(&program_state.start_time); // Start reaction timer
+        if (state.game_state == STATE_READY) {
+            state.game_state = STATE_REACT;
+            QueryPerformanceCounter(&data.start_time); // Start reaction timer
             InvalidateRect(*hwnd, NULL, TRUE); // Force repaint
         }
         break;
@@ -307,7 +312,7 @@ void TimerStateLogic(WPARAM* wParam, HWND* hwnd) {
         break;
 
     case TIMER_DEBOUNCE:  // Debounce reset
-        program_state.debounce_active = false;
+        state.debounce_active = false;
         break;
 
     }
@@ -318,43 +323,42 @@ void ResetLogic(HWND hwnd) {
     KillTimer(hwnd, TIMER_REACT);
     KillTimer(hwnd, TIMER_EARLY);
 
-    program_state.game_state = STATE_READY;
+    state.game_state = STATE_READY;
    
     SetTimer(hwnd, TIMER_READY, GenerateRandomDelay(config.min_delay, config.max_delay), NULL);
     InvalidateRect(hwnd, NULL, TRUE);
 }
 
 void GameResultLogic(wchar_t* buffer) { // ##REVIEW## Hard to follow. Maybe clean up?
-    program_state.trial_iteration++;
+    state.trial_iteration++;
 
-    if (program_state.current_attempt < config.averaging_trials) {
+    if (state.current_attempt < config.averaging_trials) {
             swprintf_s(buffer, 100, L"Last: %.2lfms\nComplete %d trials for average.\nTrials so far: %d",
-                program_state.reaction_times[(program_state.current_attempt - 1 + config.averaging_trials) % config.averaging_trials],
-                     config.averaging_trials, program_state.trial_iteration);
+                data.reaction_time_value, config.averaging_trials, state.trial_iteration);
         } else {
             double total = 0;
             for (int i = 0; i < config.averaging_trials; i++) {
-                total += program_state.reaction_times[i];
+                total += data.reaction_time_array[i];
             }
             double average = total / config.averaging_trials;
             swprintf_s(buffer, 100, L"Last: %.2lfms\nAverage (last %d): %.2lfms\nTrials so far: %d",
-                program_state.reaction_times[(program_state.current_attempt - 1) % config.averaging_trials], config.averaging_trials, average, program_state.trial_iteration);
+                data.reaction_time_value, config.averaging_trials, average, state.trial_iteration);
         }
         if (config.trial_logging) {
-            AppendToLog(program_state.reaction_times[(program_state.current_attempt - 1 + config.averaging_trials) % config.averaging_trials],
-                program_state.trial_iteration, program_state.trial_log_path, NULL);
+            AppendToLog(data.reaction_time_value,
+                state.trial_iteration, data.trial_log_path, NULL);
         }
 }
 
 // Utility Functions
 void InitializeSettings(HWND* hwnd) {
-    QueryPerformanceFrequency(&program_state.frequency);
+    QueryPerformanceFrequency(&data.frequency);
 
     if (config.trial_logging) InitializeLogFileName(0);
     if (config.debug_logging) InitializeLogFileName(1);
 
     // Ensure Initial State
-    program_state.game_state = STATE_INITIAL;
+    state.game_state = STATE_INITIAL;
 
     // Prepare font
     ui.font_weight = FW_REGULAR;
@@ -390,13 +394,13 @@ void InitializeSettings(HWND* hwnd) {
 void HandleError(const wchar_t* error_message) {
     MessageBoxW(NULL, error_message, L"Error", MB_OK);
     if (config.debug_logging){
-        AppendToLog(0, 0, program_state.debug_log_path, error_message);
+        AppendToLog(0, 0, data.debug_log_path, error_message);
     }
     exit(1);
 }
 
 void SetBrush(HBRUSH* brush) {
-    switch (program_state.game_state) {
+    switch (state.game_state) {
     case STATE_INITIAL:
         *brush = ui.result_brush;
         break;
@@ -589,10 +593,10 @@ void InitializeLogFileName(int log_type) { // log_type = 0 = trial log, log_type
 
     if (log_type) {
         wcsftime(timestamp, timestamp_length, L"%Y%m%d%H%M%S", tmp);  // Format YYYYMMDDHHMMSS
-        swprintf_s(program_state.debug_log_path, MAX_PATH, L"log\\DEBUG_Log_%s.log", timestamp);
+        swprintf_s(data.debug_log_path, MAX_PATH, L"log\\DEBUG_Log_%s.log", timestamp);
     } else {
         wcsftime(timestamp, timestamp_length, L"%Y%m%d%H%M%S", tmp);  // Format YYYYMMDDHHMMSS
-        swprintf_s(program_state.trial_log_path, MAX_PATH, L"log\\Log_%s.log", timestamp);
+        swprintf_s(data.trial_log_path, MAX_PATH, L"log\\Log_%s.log", timestamp);
     }
 }
 
@@ -680,43 +684,42 @@ bool RegisterForRawInput(HWND hwnd, USHORT usage) {
 }
 
 void HandleInput(HWND hwnd, bool is_mouse_input) {   // Primary input logic is done here
-    if ((!program_state.mouse_active && is_mouse_input) || (program_state.debounce_active)) {
+    if ((!state.mouse_active && is_mouse_input) || (state.debounce_active)) {
         return;  // Ignore mouse clicks outside of active area
     }
 
-    // ##REVIEW## Make this a switch case
-
-    switch(program_state.game_state) {
+    switch(state.game_state) {
     case STATE_INITIAL:
-        program_state.game_state = STATE_READY;
+        state.game_state = STATE_READY;
         SetTimer(hwnd, TIMER_READY, GenerateRandomDelay(config.min_delay, config.max_delay), NULL);
         InvalidateRect(hwnd, NULL, TRUE);
         break;
 
     case STATE_REACT:
-        QueryPerformanceCounter(&program_state.end_time);
-        double time_taken = ((double)(program_state.end_time.QuadPart - program_state.start_time.QuadPart) / program_state.frequency.QuadPart) * 1000;
+        QueryPerformanceCounter(&data.end_time);
+        data.reaction_time_value = ((double)(data.end_time.QuadPart - data.start_time.QuadPart) / data.frequency.QuadPart) * 1000;
 
-        program_state.reaction_times[program_state.current_attempt % config.averaging_trials] = time_taken;
-        program_state.current_attempt++;
+        // ##REVIEW##HIGH## This is a rolling array of values
+        data.reaction_time_array[state.current_attempt % config.averaging_trials] = data.reaction_time_value; 
+        state.current_attempt++;
 
-        program_state.game_state = STATE_RESULT;
+        state.game_state = STATE_RESULT;
         InvalidateRect(hwnd, NULL, TRUE);
         break;
 
     case STATE_EARLY:
     case STATE_RESULT:
-        if ((program_state.game_state == STATE_RESULT) && program_state.current_attempt == config.averaging_trials) { // ##REVIEW## This is messy
-            program_state.current_attempt = 0;
+        if ((state.game_state == STATE_RESULT) && state.current_attempt == config.averaging_trials) { // ##REVIEW## This is messy
+            state.current_attempt = 0;
             for (int i = 0; i < config.averaging_trials; i++) {
-                program_state.reaction_times[i] = 0;
+                data.reaction_time_array[i] = 0;
             }
         }
         ResetLogic(hwnd);
         break;
 
     case STATE_READY:
-        program_state.game_state = STATE_EARLY;
+        state.game_state = STATE_EARLY;
         KillTimer(hwnd, TIMER_READY);
         if (config.early_reset_delay > 0) {
             SetTimer(hwnd, TIMER_EARLY, config.early_reset_delay, NULL); // Early state eventually resets back to Ready state automatically
@@ -725,8 +728,8 @@ void HandleInput(HWND hwnd, bool is_mouse_input) {   // Primary input logic is d
         break;
     }
 
-    if ((config.virtual_debounce > 0) && (!program_state.debounce_active)) { // Activate debounce if enabled
-        program_state.debounce_active = true;
+    if ((config.virtual_debounce > 0) && (!state.debounce_active)) { // Activate debounce if enabled
+        state.debounce_active = true;
         SetTimer(hwnd, TIMER_DEBOUNCE, config.virtual_debounce, NULL);
     }
 }
@@ -760,12 +763,12 @@ void HandleRawInput(HWND* hwnd, LPARAM* lParam) { // ##REVIEW## Keyboard and Mou
 void HandleRawKeyboardInput(RAWINPUT* raw, HWND hwnd) {
     int vkey = raw->data.keyboard.VKey;
 
-    if (raw->data.keyboard.Flags == RI_KEY_MAKE && IsAlphanumeric(vkey) && !program_state.key_states[vkey]) {
+    if (raw->data.keyboard.Flags == RI_KEY_MAKE && IsAlphanumeric(vkey) && !state.key_states[vkey]) {
         HandleInput(hwnd, false);
-        program_state.key_states[vkey] = true;
+        state.key_states[vkey] = true;
     }
     else if (raw->data.keyboard.Flags == RI_KEY_BREAK) {
-        program_state.key_states[vkey] = false;
+        state.key_states[vkey] = false;
     }
 }
 
