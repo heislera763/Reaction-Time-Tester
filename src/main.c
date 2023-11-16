@@ -184,6 +184,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
         }
         return TRUE;
 
+    case WM_SIZE:
+        InvalidateRect(hwnd,NULL,TRUE);
+        break;  
+
     case WM_PAINT: 
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hwnd, &ps);
@@ -329,12 +333,10 @@ void ResetLogic(HWND hwnd) {
     InvalidateRect(hwnd, NULL, TRUE);
 }
 
-void GameResultLogic(wchar_t* buffer) { // ##REVIEW## Hard to follow. Maybe clean up?
-    state.trial_iteration++;
-
+void GameResultLogic(wchar_t* buffer) { // ##REVIEW## Hard to follow and combines visual data with game logic code. Needs clean up?
     if (state.current_attempt < config.averaging_trials) {
-            swprintf_s(buffer, 100, L"Last: %.2lfms\nComplete %d trials for average.\nTrials so far: %d",
-                data.reaction_time_value, config.averaging_trials, state.trial_iteration);
+        swprintf_s(buffer, 100, L"Last: %.2lfms\nComplete %d trials for average.\nTrials so far: %d",
+            data.reaction_time_value, config.averaging_trials, state.trial_iteration);
         } else {
             double total = 0;
             for (int i = 0; i < config.averaging_trials; i++) {
@@ -696,6 +698,7 @@ void HandleInput(HWND hwnd, bool is_mouse_input) {   // Primary input logic is d
         break;
 
     case STATE_REACT:
+        state.trial_iteration++;
         QueryPerformanceCounter(&data.end_time);
         data.reaction_time_value = ((double)(data.end_time.QuadPart - data.start_time.QuadPart) / data.frequency.QuadPart) * 1000;
 
