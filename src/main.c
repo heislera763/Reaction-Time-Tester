@@ -561,7 +561,7 @@ void LoadConfig() { // ##REVIEW## Probably need more error handling for bad valu
     if (config.averaging_trials <= 0) {
         HandleError(L"Invalid number of averaging trials in user.cfg");
     }
-    config.total_trials = GetPrivateProfileIntW(L"Trial", L"TotalTrials", DEFAULT_TOTAL_TRIALS, cfg_path); // ##INCOMPLETE## total_trials is not yet utilized for anything 
+    config.total_trials = GetPrivateProfileIntW(L"Trial", L"TotalTrials", DEFAULT_TOTAL_TRIALS, cfg_path); // ##REVIEW##LOW## total_trials is not yet utilized for anything 
     if (config.total_trials <= 0) {
         HandleError(L"Invalid number of total trials in user.cfg");
     }
